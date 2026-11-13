@@ -2,8 +2,25 @@
   "name": "@work/cli",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts", "./*": "./src/*.ts" },
-  "scripts": { "test": "bun test", "typecheck": "tsc -p tsconfig.json" },
-  "dependencies": { "@work/schema": "workspace:*", "@work/client": "workspace:*", "effect": "catalog:" },
-  "devDependencies": { "@types/bun": "catalog:", "typescript": "catalog:"  }
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "bun build --compile src/index.ts --outfile bin/work"
+  },
+  "dependencies": {
+    "@work/schema": "workspace:*",
+    "@work/client": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "bin": {
+    "work": "./src/index.ts"
+  }
 }
