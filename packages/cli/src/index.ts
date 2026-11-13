@@ -27,6 +27,7 @@ const OPTIONS = {
   fields: { type: "string" },
   out: { type: "string" },
   to: { type: "string" },
+  ask: { type: "string" },
   since: { type: "string" },
   by: { type: "string" },
   in: { type: "string" },

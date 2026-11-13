@@ -1,5 +1,7 @@
 export * as Auth from "./auth.ts"
 
+import { mkdirSync, rmSync, statSync } from "node:fs"
+import { join } from "node:path"
 import { Config } from "./config.ts"
 
 /**
@@ -12,7 +14,8 @@ interface Tokens {
 }
 
 const SERVICE = "work-cli"
-const useFile = () => !!process.env.WORK_HOME || process.env.WORK_KEYCHAIN === "0"
+/** The keychain, unless WORK_KEYCHAIN=0, or WORK_HOME is set without WORK_KEYCHAIN=1. */
+const useFile = () => process.env.WORK_KEYCHAIN === "0" || (!!process.env.WORK_HOME && process.env.WORK_KEYCHAIN !== "1")
 
 async function load(url: string): Promise<Tokens | null> {
   try {
@@ -75,19 +78,57 @@ async function authenticate(body: Record<string, string>) {
   return { ok: response.ok, json }
 }
 
+const fresh = (tokens: Tokens) => {
+  // Local dev tokens never expire and are never refreshed.
+  if (tokens.access.startsWith("dev.") || !tokens.refresh) return true
+  const exp = expiresAt(tokens.access)
+  return exp === null || exp - Date.now() > 60_000
+}
+
+/**
+ * One refresh at a time on this machine. A refresh token works once, and an agent's hooks and its own `work` calls run
+ * side by side; the second to arrive finds the tokens the first saved.
+ */
+async function exclusively<A>(f: () => Promise<A>): Promise<A> {
+  const lock = join(Config.home(), "refresh.lock")
+  mkdirSync(Config.home(), { recursive: true, mode: 0o700 })
+  const until = Date.now() + 15_000
+  for (;;) {
+    try {
+      mkdirSync(lock)
+      break
+    } catch {
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > 15_000) rmSync(lock, { recursive: true, force: true })
+      } catch {
+        // Gone already.
+      }
+      if (Date.now() > until) break
+      await Bun.sleep(50 + Math.random() * 100)
+    }
+  }
+  try {
+    return await f()
+  } finally {
+    rmSync(lock, { recursive: true, force: true })
+  }
+}
+
 /** A valid access token, refreshed when it is about to expire. Null when the person is not signed in. */
 export async function token(url: string): Promise<string | null> {
   const tokens = await load(url)
   if (!tokens) return null
-  // Local dev tokens never expire and are never refreshed.
-  if (tokens.access.startsWith("dev.")) return tokens.access
-  const exp = expiresAt(tokens.access)
-  if (exp === null || exp - Date.now() > 60_000 || !tokens.refresh) return tokens.access
-  const config = await serverConfig(url)
-  const result = await authenticate({ grant_type: "refresh_token", client_id: config.clientId, refresh_token: tokens.refresh })
-  if (!result.ok || !result.json.access_token) return null
-  await save(url, { access: result.json.access_token, refresh: result.json.refresh_token ?? tokens.refresh })
-  return result.json.access_token
+  if (fresh(tokens)) return tokens.access
+  return exclusively(async () => {
+    const latest = await load(url)
+    if (!latest) return null
+    if (fresh(latest)) return latest.access
+    const config = await serverConfig(url)
+    const result = await authenticate({ grant_type: "refresh_token", client_id: config.clientId, refresh_token: latest.refresh! })
+    if (!result.ok || !result.json.access_token) return null
+    await save(url, { access: result.json.access_token, refresh: result.json.refresh_token ?? latest.refresh })
+    return result.json.access_token
+  })
 }
 
 /** Local development: sign in as anyone. The server only allows it on localhost with DEV_AUTH set. */

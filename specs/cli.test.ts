@@ -2,6 +2,10 @@
  * End to end through the `work` CLI against a running server (local dev by default, WORK_URL otherwise). Each person
  * has their own WORK_HOME, so their sign-ins and session state are apart, as on separate machines. The transcript of
  * every command goes to .cache/cli-e2e-<workspace>.log.
+ *
+ * On a deployed stage nobody can sign in as anyone. With WORK_E2E_SIGNED_IN=1 the suite runs as the person signed in
+ * on this machine (`work login --url <stage>`, kept in the keychain), with three of their agents standing in for the
+ * three people. That person needs the admin role, to create the test workspace.
  */
 import { afterAll, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
@@ -11,8 +15,9 @@ const baseUrl = process.env.WORK_URL ?? "http://localhost:8787"
 const config = await fetch(`${baseUrl}/api/config`)
   .then((r) => (r.ok ? (r.json() as Promise<{ devAuth: boolean }>) : null))
   .catch(() => null)
-// Signing in as anyone needs a local server with DEV_AUTH; elsewhere this suite needs real sign-ins.
-const runnable = !!config?.devAuth
+// Signing in as anyone needs a local server with DEV_AUTH; elsewhere this suite runs as whoever is signed in.
+const real = !config?.devAuth && process.env.WORK_E2E_SIGNED_IN === "1"
+const runnable = !!config?.devAuth || real
 
 const CLI = resolve(import.meta.dir, "../packages/cli/src/index.ts")
 const ws = `cli-${Date.now().toString(36)}`
@@ -25,12 +30,16 @@ interface Who {
 }
 
 /** The environment of a fresh terminal: nothing from whatever runs these tests. */
-const cleanEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("WORK_") && k !== "CLAUDE_ENV_FILE")) as Record<string, string>
+const cleanEnv = () => ({
+  ...(Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("WORK_") && k !== "CLAUDE_ENV_FILE")) as Record<string, string>),
+  // Whatever runs these tests (an agent, say) is not who the commands run as.
+  WORK_DETECT: "0",
+})
 
 const person = (handle: string) => {
-  const home = join(root, "homes", handle)
+  const home = join(root, "homes", real ? "me" : handle)
   mkdirSync(home, { recursive: true })
-  return { handle, home, env: { WORK_HOME: home, WORK_URL: baseUrl, WORK_NO_BROWSER: "1" } }
+  return { handle, home, env: { WORK_HOME: home, WORK_URL: baseUrl, WORK_NO_BROWSER: "1", ...(real ? { WORK_KEYCHAIN: "1" } : {}) } }
 }
 const as = (p: ReturnType<typeof person>, agent: string, session: string, extra: Record<string, string> = {}): Who => ({
   name: `${p.handle}/${agent}`,
@@ -72,8 +81,10 @@ const anna = person("anna")
 const lea = person("lea")
 const K = as(karl, "claude", `karl-claude-${ws}`)
 const A = as(anna, "codex", `anna-codex-${ws}`)
-const L = as(lea, "claude", `lea-claude-${ws}`)
+const L = as(lea, real ? "cursor" : "claude", `lea-claude-${ws}`)
 const host = `docs.example.com/${ws}`
+/** Addresses and names as the server prints them; with a real sign-in they are learned from `work whoami`. */
+const who = { k: "karl/claude", a: "anna/codex", l: "lea/claude", annaName: "Anna Berg", annaHandle: "anna" }
 
 afterAll(() => {
   mkdirSync(resolve(import.meta.dir, "../.cache"), { recursive: true })
@@ -82,7 +93,12 @@ afterAll(() => {
 
 describe.skipIf(!runnable)("the work CLI", () => {
   test("people sign in and choose a workspace", async () => {
-    for (const [p, name] of [
+    if (real) {
+      const me = JSON.parse((await work({ name: "me", env: karl.env }, ["whoami", "--json"])).out) as { actor: { handle: string; name: string } }
+      const h = me.actor.handle
+      Object.assign(who, { k: `${h}/claude`, a: `${h}/codex`, l: `${h}/cursor`, annaName: me.actor.name, annaHandle: h })
+    }
+    for (const [p, name] of real ? [] : [
       [karl, "Karl Holm"],
       [anna, "Anna Berg"],
       [lea, "Lea Nyström"],
@@ -96,8 +112,8 @@ describe.skipIf(!runnable)("the work CLI", () => {
     expect(created.err).toContain(`Created ${ws}`)
     const me = await work({ name: "karl", env: { ...karl.env, WORK_AGENT: "claude", WORK_SESSION: K.env.WORK_SESSION! } }, ["whoami"])
     expect(me.out).toContain(`Workspace: ${ws}.`)
-    expect(me.out).toContain(`Agent karl/claude, session ${K.env.WORK_SESSION}.`)
-    const unsigned = await work({ name: "nobody", env: person("nobody").env }, ["whoami"])
+    expect(me.out).toContain(`Agent ${who.k}, session ${K.env.WORK_SESSION}.`)
+    const unsigned = await work({ name: "nobody", env: { WORK_HOME: join(root, "homes", "nobody"), WORK_URL: baseUrl, WORK_KEYCHAIN: "0" } }, ["whoami"])
     expect(unsigned.code).toBe(3)
   })
 
@@ -110,12 +126,12 @@ describe.skipIf(!runnable)("the work CLI", () => {
     expect((await work(A, ["start", "Fix the bolt price"])).code).toBe(0)
     const held = await work(A, ["claim", url])
     expect(held.code).toBe(1)
-    expect(held.err).toContain("Held by karl/claude")
+    expect(held.err).toContain(`Held by ${who.k}`)
     expect(held.err).toContain('for "Raise bearing prices"')
 
     expect((await work(A, ["ask", url, "When will you be done with the prices?"])).code).toBe(0)
     const asked = await work(K, ["inbox"])
-    expect(asked.out).toContain("anna/codex asks")
+    expect(asked.out).toContain(`${who.a} asks`)
     expect(asked.out).toContain("When will you be done with the prices?")
     expect((await work(K, ["inbox"])).out).toContain("Nothing new.")
 
@@ -123,9 +139,9 @@ describe.skipIf(!runnable)("the work CLI", () => {
     const waiting = work(A, ["claim", url, "--wait", "30s"])
     const queued = await eventually(
       () => work(K, ["who", url]),
-      (r) => r.out.includes("anna/codex waits"),
+      (r) => r.out.includes(`${who.a} waits`),
     )
-    expect(queued.out).toContain("anna/codex waits")
+    expect(queued.out).toContain(`${who.a} waits`)
 
     expect((await work(K, ["put", url, "--from", "-"], { stdin: '{"bearing":12,"bolt":2}' })).out).toContain("Wrote v2")
     expect((await work(K, ["done"])).out).toContain(`Released ${host}/prices.json`)
@@ -140,12 +156,12 @@ describe.skipIf(!runnable)("the work CLI", () => {
     expect((await work(A, ["read", url])).out).toContain('"bearing":12')
     expect((await work(A, ["put", url, "--from", "-", "--why", "bolt was wrong"], { stdin: '{"bearing":12,"bolt":3}' })).out).toContain("Wrote v3")
 
-    expect((await work(A, ["tell", "karl/claude", "Bolt fixed on top of your bearing change"])).code).toBe(0)
+    expect((await work(A, ["tell", who.k, "Bolt fixed on top of your bearing change"])).code).toBe(0)
     expect((await work(K, ["inbox"])).out).toContain("Bolt fixed on top of your bearing change")
 
     const blame = await work(K, ["blame", url])
-    expect(blame.out).toMatch(/bearing\s+v2\s.*karl\/claude/)
-    expect(blame.out).toMatch(/bolt\s+v3\s.*anna\/codex/)
+    expect(blame.out).toMatch(new RegExp(`bearing\\s+v2\\s.*${who.k}`))
+    expect(blame.out).toMatch(new RegExp(`bolt\\s+v3\\s.*${who.a}`))
     const diff = await work(K, ["diff", url])
     expect(diff.out).toContain("v2 → v3: 1 change")
     expect(diff.out).toContain("- bolt: 2")
@@ -165,15 +181,15 @@ describe.skipIf(!runnable)("the work CLI", () => {
     expect((await work(A, ["start", "Check the totals"])).code).toBe(0)
     const joined = await work(L, ["join", session])
     expect(joined.code).toBe(0)
-    expect(joined.out).toContain(`Joined ${session}, anna/codex's session.`)
+    expect(joined.out).toContain(`Joined ${session}, ${who.a}'s session.`)
     expect(joined.out).toContain('"Check the totals"')
 
     const here = await eventually(
       () => work(K, ["here", session]),
-      (r) => r.out.includes("lea/claude"),
+      (r) => r.out.includes(who.l),
     )
-    expect(here.out).toContain("lea/claude")
-    expect(here.out).toContain("anna")
+    // Presence is who holds a socket open: the joiner. The owner works through the CLI and holds none.
+    expect(here.out).toBe(`In ${session}: ${who.l}.\n`)
 
     expect((await work(L, ["whoami"])).out).toContain(`session ${session} (joined; own ${L.env.WORK_SESSION})`)
     expect((await work(L, ["note", "Totals add up after the bolt fix"])).code).toBe(0)
@@ -181,20 +197,20 @@ describe.skipIf(!runnable)("the work CLI", () => {
       () => work(K, ["log", "--in", session]),
       (r) => r.out.includes("Totals add up") && r.out.includes("join"),
     )
-    expect(log.out).toMatch(/lea\/claude\s+join/)
-    expect(log.out).toMatch(/lea\/claude\s+note: Totals add up after the bolt fix/)
+    expect(log.out).toMatch(new RegExp(`${who.l}\\s+join`))
+    expect(log.out).toMatch(new RegExp(`${who.l}\\s+note: Totals add up after the bolt fix`))
 
     expect((await work(L, ["leave"])).out).toContain(`Left ${session}.`)
     const gone = await eventually(
       () => work(K, ["here", session]),
-      (r) => !r.out.includes("lea/claude"),
+      (r) => !r.out.includes(who.l),
     )
-    expect(gone.out).not.toContain("lea/claude")
+    expect(gone.out).not.toContain(who.l)
     const left = await eventually(
       () => work(K, ["log", "--in", session]),
-      (r) => /lea\/claude\s+leave/.test(r.out),
+      (r) => new RegExp(`${who.l}\\s+leave`).test(r.out),
     )
-    expect(left.out).toMatch(/lea\/claude\s+leave/)
+    expect(left.out).toMatch(new RegExp(`${who.l}\\s+leave`))
     expect((await work(L, ["whoami"])).out).toContain(`session ${L.env.WORK_SESSION}.`)
     expect((await work(A, ["done"])).code).toBe(0)
   })
@@ -205,7 +221,7 @@ describe.skipIf(!runnable)("the work CLI", () => {
     expect((await work(K, ["claim", url])).code).toBe(0)
     expect((await work(L, ["comment", url, "Lindqvist changed their payment terms"])).out).toContain("Commented.")
     const inbox = await work(K, ["inbox", "--peek"])
-    expect(inbox.out).toContain(`lea/claude on ${url}: Lindqvist changed their payment terms`)
+    expect(inbox.out).toContain(`${who.l} on ${url}: Lindqvist changed their payment terms`)
     // Peeking leaves it there; reading takes it.
     expect((await work(K, ["inbox"])).out).toContain("Lindqvist")
     expect((await work(K, ["inbox"])).out).toContain("Nothing new.")
@@ -222,17 +238,12 @@ describe.skipIf(!runnable)("the work CLI", () => {
     expect((await work(K, ["put", url, "--from", "-"], { stdin: '{"days":45,"currency":"EUR"}' })).out).toContain("Wrote v2")
     expect((await work(K, ["done"])).code).toBe(0)
 
-    // The browser's Revert button, as Anna the person (no agent).
-    const token = JSON.parse(JSON.parse(readFileSync(join(anna.home, "credentials.json"), "utf8"))[baseUrl]).access as string
-    const response = await fetch(`${baseUrl}/api/w/${ws}/revert-requests`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ url: `https://${url}`, version: 2, to: "karl/claude" }),
-    })
-    expect(response.status).toBe(200)
+    // The app's Revert button, from Anna's terminal: a person, not an agent.
+    const asked = await work({ name: "anna", env: { ...anna.env, WORK_WORKSPACE: ws } }, ["revert", `${url}@v2`, "--ask", who.k])
+    expect(asked.out).toContain(`Asked ${who.k} to revert v2 of ${url}.`)
 
     const inbox = await work(K, ["inbox"])
-    expect(inbox.out).toContain(`Anna Berg, in the browser: revert v2 of ${url}. Do it with: work revert ${url}@v2`)
+    expect(inbox.out).toContain(`${who.annaName} (${who.annaHandle}): revert v2 of ${url}. Do it with: work revert ${url}@v2`)
 
     expect((await work(K, ["start", "Revert the terms change Anna asked for"])).code).toBe(0)
     const file = join(root, "terms.v3.json")
@@ -300,9 +311,9 @@ describe.skipIf(!runnable)("the work CLI", () => {
     expect((await hook("tool", { tool_name: "Bash", tool_input: { command: "ls -la\necho second line" } })).code).toBe(0)
     expect((await hook("tool", { tool_name: "Bash", tool_input: { command: "work note hello" } })).code).toBe(0)
 
-    expect((await work(A, ["tell", "karl/claude", "Prices are approved"])).code).toBe(0)
+    expect((await work(A, ["tell", who.k, "Prices are approved"])).code).toBe(0)
     const prompt = await hook("prompt", { hook_event_name: "UserPromptSubmit", prompt: "go on" })
-    expect(JSON.parse(prompt.out).hookSpecificOutput.additionalContext).toContain("anna/codex says: Prices are approved")
+    expect(JSON.parse(prompt.out).hookSpecificOutput.additionalContext).toContain(`${who.a} says: Prices are approved`)
 
     const log = await eventually(
       () => work(K, ["log", "--in", session, "--json"]),

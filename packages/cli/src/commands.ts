@@ -76,7 +76,7 @@ async function waitForClaim(ctx: Ctx, workspace: string, waiter: number, deadlin
 }
 
 const describeEntry = (e: Entry.Info, names: (handle: string) => string) => {
-  const from = e.actor.agent ? `${address(e.actor)}` : `${e.actor.name}, in the browser`
+  const from = e.actor.agent ? address(e.actor) : `${e.actor.name} (${e.actor.handle})`
   const key = e.keys[0]
   switch (e.kind) {
     case "comment":
@@ -237,13 +237,18 @@ export const commands: Record<string, Command> = {
   },
   revert: {
     group: "Coordinate",
-    usage: "revert <url|path>@v7 [--fields a,b] [--out <file>]",
-    summary: "Claims the URL and saves what to put back. Apply it in the app, then log it with work put --revert v7.",
+    usage: "revert <url|path>@v7 [--fields a,b] [--out <file>] | revert <url|path>@v7 --ask <handle/agent>",
+    summary: "Claims the URL and saves what to put back; apply it, then log it with work put --revert v7. --ask asks an agent to do it, as the app's Revert button does.",
     async run(ctx, [input], opts) {
-      ctx.needSession()
       const workspace = await ctx.workspace()
       const target = Target.resolveTarget(need(input, this.usage))
       if (!target.version) throw new Exit(EXIT.usage, "Name the version to revert: work revert <url>@v7")
+      const ask = str(opts.ask)
+      if (ask) {
+        const e = await ctx.call<Entry.Info>((c) => c.write.requestRevert({ params: { workspace }, payload: { url: target.url, version: target.version!, to: ask } }))
+        return print(`Asked ${ask} to revert v${target.version} of ${e.keys[0]}. It arrives in their inbox.`, e)
+      }
+      ctx.needSession()
       const fields = str(opts.fields)?.split(",").map((f) => f.trim()).filter(Boolean)
       const plan = await ctx.call<Write.RevertPlan>((c) => c.write.revert({ params: { workspace }, payload: { url: target.url, version: target.version!, fields } }))
       const shape = plan.content?.trim().startsWith("{") ? "json" : plan.content?.includes(",") ? "csv" : "txt"

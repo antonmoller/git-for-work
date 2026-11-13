@@ -17,6 +17,8 @@ const processInfo = (pid: number) => {
  * start time name the session, so every command from one agent window lands in the same session without any setup.
  */
 export const detect = () => {
+  // WORK_DETECT=0 says this is a person at a terminal, whatever runs it (tests, scripts).
+  if (process.env.WORK_DETECT === "0") return null
   let pid = process.ppid
   for (let depth = 0; depth < 12 && pid > 1; depth++) {
     const info = processInfo(pid)
