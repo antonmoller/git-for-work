@@ -7,7 +7,9 @@ import { Write } from "@work/schema/write"
 import { common, params, ws } from "./common.ts"
 
 export const WriteResult = Schema.Struct({
-  entry: Entry.Info,
+  /** Null when the content was already the current version's, so nothing was written. */
+  entry: Schema.NullOr(Entry.Info),
+  unchanged: Schema.optional(Schema.Boolean),
   version: Schema.Int,
   changed: Schema.Array(Schema.String),
   summary: Schema.String,
@@ -31,7 +33,7 @@ export const WriteGroup = HttpApiGroup.make("write")
         revertOf: Schema.optional(Schema.Int),
       }),
       success: WriteResult,
-      error: [...common, Errors.KeyHeld, Errors.StaleBase],
+      error: [...common, Errors.KeyHeld, Errors.StaleBase, Errors.StaleContent],
     }),
   )
   .add(

@@ -76,6 +76,12 @@ export function refusal(error: { _tag?: string; [k: string]: any } | null, fallb
           : `Not written: ${error.key} is at v${error.current} (${address(error.by)}, ${clock(error.at)}) and this session has not read it.\nRead it first: work read ${error.key}`,
         error,
       )
+    case "StaleContent":
+      return new Exit(
+        EXIT.refused,
+        `Not written: this is v${error.matches}'s content, and ${error.key} is at v${error.current}; writing it would undo v${error.matches + 1}–v${error.current}.\nIt is probably a stale copy: read the latest with work read ${error.key} --out <file>, redo the change there, then put. To undo a version on purpose: work revert ${error.key}@v<n> --put`,
+        error,
+      )
     case "RevertConflict":
       return new Exit(EXIT.refused, `Not reverted: v${error.later} at ${clock(error.at)} by ${address(error.by)} changed ${error.fields.join(", ")} after v${error.version}.`, error)
     case "TaskTaken":

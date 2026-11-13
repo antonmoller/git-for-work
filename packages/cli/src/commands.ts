@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs"
+import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { basename } from "node:path"
 import { WorkSocket } from "@work/client"
 import type { Claim } from "@work/schema/claim"
@@ -124,8 +124,8 @@ export const commands: Record<string, Command> = {
   },
   read: {
     group: "Log a trajectory",
-    usage: "read <url|path> [--version v41]",
-    summary: "Records what the agent read and at which version, and prints the content if Work holds it.",
+    usage: "read <url|path> [--version v41] [--out <file>]",
+    summary: "Records what the agent read and at which version, and prints the content if Work holds it. --out writes it to a file; --out with the same path updates a checkout file.",
     async run(ctx, [input], opts) {
       ctx.needSession()
       const workspace = await ctx.workspace()
@@ -136,9 +136,11 @@ export const commands: Record<string, Command> = {
       const got = await ctx.call<{ version: Write.Version_; content: string | null }>((c) => c.write.version({ params: { workspace }, query: { url: target.url, version: e.version! } }))
       const fields = got.content ? Fields.parse(got.content) : {}
       const size = "#header" in fields ? plural(Object.keys(fields).length - 1, "row") : "content" in fields ? "text" : plural(Object.keys(fields).length, "field")
-      if (isJson()) return print("", { entry: e, version: got.version, content: got.content })
-      info(`v${e.version} · ${size} · written ${clock(got.version.at)} by ${address(got.version.actor)}`)
-      if (got.content !== null) process.stdout.write(got.content.endsWith("\n") ? got.content : `${got.content}\n`)
+      const out = str(opts.out)
+      if (out && got.content !== null) writeFileSync(out, got.content)
+      if (isJson()) return print("", { entry: e, version: got.version, content: got.content, ...(out ? { out } : {}) })
+      info(`v${e.version} · ${size} · written ${clock(got.version.at)} by ${address(got.version.actor)}${out && got.content !== null ? ` · saved to ${out}` : ""}`)
+      if (!out && got.content !== null) process.stdout.write(got.content.endsWith("\n") ? got.content : `${got.content}\n`)
     },
   },
   done: {
@@ -231,16 +233,27 @@ export const commands: Record<string, Command> = {
       let base = parseVersion(str(opts.base))
       // A revert's base is the version `work revert` saw; the agent holds the claim, so it is still current.
       if (base === undefined && revertOf !== undefined) base = (await ctx.call<Claim.Who>((c) => c.claim.who({ params: { workspace }, query: { url: target.url } }))).version
-      const r = await ctx.call<{ version: number; summary: string; released: string[]; entry: Entry.Info }>((c) =>
+      const r = await ctx.call<{ version: number; summary: string; released: string[]; entry: Entry.Info | null; unchanged?: boolean }>((c) =>
         c.write.put({ params: { workspace }, payload: { url: target.url, content, ...(base !== undefined ? { base } : {}), title: str(opts.title), why: str(opts.why), revertOf } }),
       )
-      print(`Wrote v${r.version}${revertOf ? `, reverting v${revertOf}` : ""} (${r.summary}).${r.released.length ? " Released." : ""}`, r)
+      if (r.unchanged) return print(`No change: v${r.version} already has this content, so nothing was written.`, r)
+      // Written from another file: the checkout file is now behind Work, and a later bare put from it would be stale.
+      const behind = target.path && str(opts.from) && str(opts.from) !== "-" && existsSync(target.path) && readFileSync(target.path, "utf8") !== content
+      print(
+        [
+          `Wrote v${r.version}${revertOf ? `, reverting v${revertOf}` : ""} (${r.summary}).${r.released.length ? " Released." : ""}`,
+          behind ? `${target.path} in this checkout is older than v${r.version}; update it with: work read ${target.path} --out ${target.path}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        r,
+      )
     },
   },
   revert: {
     group: "Coordinate",
-    usage: "revert <url|path>@v7 [--fields a,b] [--out <file>] | revert <url|path>@v7 --ask <handle/agent>",
-    summary: "Claims the URL and saves what to put back; apply it, then log it with work put --revert v7. --ask asks an agent to do it, as the app's Revert button does.",
+    usage: "revert <url|path>@v7 [--fields a,b] [--out <file>] [--put] | revert <url|path>@v7 --ask <handle/agent>",
+    summary: "Claims the URL and saves what to put back; --put also writes it as the next version (and the checkout file, for a path). --ask asks an agent to do it, as the app's Revert button does.",
     async run(ctx, [input], opts) {
       const workspace = await ctx.workspace()
       const target = Target.resolveTarget(need(input, this.usage))
@@ -256,12 +269,26 @@ export const commands: Record<string, Command> = {
       const shape = plan.content?.trim().startsWith("{") ? "json" : plan.content?.includes(",") ? "csv" : "txt"
       const out = str(opts.out) ?? `${basename(plan.key.split(/[?#]/)[0]!) || "content"}.v${plan.current + 1}.${shape}`
       if (plan.content !== null) writeFileSync(out, plan.content)
-      const values = Object.entries(plan.values).map(([f, v]) => `${f} ${unquote(v)}`)
+      // A CSV row's value already starts with its key; don't say it twice.
+      const values = Object.entries(plan.values).map(([f, v]) => {
+        const value = unquote(v)
+        return value.startsWith(`${f},`) ? value : `${f} ${value}`
+      })
+      const intro = `Reverting ${list([...plan.fields])} from v${plan.revertOf}; no write since touched ${plan.fields.length === 1 ? "it" : "them"}. Put back ${list(values)}.`
+      if (opts.put) {
+        if (plan.content === null) throw new Exit(EXIT.refused, `${intro}\nWork does not hold the content, so it cannot write it: apply it where it lives, then: work put ${plan.key} --revert v${plan.revertOf} --from <file>`, plan)
+        const r = await ctx.call<{ version: number; summary: string }>((c) =>
+          c.write.put({ params: { workspace }, payload: { url: target.url, content: plan.content!, base: plan.current, why: `revert of v${plan.revertOf}`, revertOf: plan.revertOf } }),
+        )
+        if (target.path) writeFileSync(target.path, plan.content)
+        return print(`${intro}\nWrote v${r.version}, reverting v${plan.revertOf}${target.path ? `, and updated ${target.path}` : ""}. Released.`, { ...plan, written: r })
+      }
       print(
         [
-          `Claimed. Reverting ${list([...plan.fields])} from v${plan.revertOf}; no write since touched ${plan.fields.length === 1 ? "it" : "them"}.`,
-          `Put back ${list(values)}${plan.content !== null ? `, saved to ${out}` : ""}.`,
-          `Apply it in the app, then: work put ${plan.key} --revert v${plan.revertOf} --from ${out}`,
+          `Claimed. ${intro}${plan.content !== null ? ` Saved the result to ${out}.` : ""}`,
+          plan.content !== null
+            ? `Write it with: work put ${plan.key} --revert v${plan.revertOf} --from ${out}  (or next time: work revert ${plan.key}@v${plan.revertOf} --put)`
+            : `Apply it where the content lives, then: work put ${plan.key} --revert v${plan.revertOf} --from <file>`,
         ].join("\n"),
         { ...plan, file: out },
       )
@@ -355,6 +382,40 @@ export const commands: Record<string, Command> = {
       const r = await ctx.call<{ items: Entry.Info[] }>((c) => c.log.inbox({ params: { workspace }, query: opts.peek ? { peek: "1" } : {} }))
       if (r.items.length === 0) return print("Nothing new.", r)
       print(r.items.map((e) => `${clock(e.at)}  ${describeEntry(e, (h) => h)}`).join("\n"), r)
+    },
+  },
+  wait: {
+    group: "Coordinate",
+    usage: "wait [--for 30m]",
+    summary: "Blocks until something arrives in the inbox, prints it and exits; exit 1 if nothing came. Run it in the background while waiting on another agent, so its answer wakes you.",
+    async run(ctx, _args, opts) {
+      ctx.needSession()
+      const workspace = await ctx.workspace()
+      const params = { workspace }
+      const deadline = Date.now() + parseDuration(str(opts.for) ?? "30m")
+      const head = (await ctx.call<Entry.Info[]>((c) => c.log.log({ params, query: { limit: 1 } })))[0]?.seq ?? 0
+      let wake: () => void = () => {}
+      const socket = WorkSocket.watch(ctx.options, workspace, head, { entries: () => wake() })
+      try {
+        while (Date.now() < deadline) {
+          const peek = await ctx.call<{ items: Entry.Info[] }>((c) => c.log.inbox({ params, query: { peek: "1" } }))
+          if (peek.items.length > 0) {
+            const r = await ctx.call<{ items: Entry.Info[] }>((c) => c.log.inbox({ params, query: {} }))
+            return print(r.items.map((e) => `${clock(e.at)}  ${describeEntry(e, (h) => h)}`).join("\n"), r)
+          }
+          // The watch socket wakes this the moment anything is logged; the timeout covers a lost socket.
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, Math.min(15e3, Math.max(0, deadline - Date.now())))
+            wake = () => {
+              clearTimeout(timer)
+              resolve()
+            }
+          })
+        }
+      } finally {
+        socket.close()
+      }
+      throw new Exit(EXIT.refused, `Nothing arrived in ${str(opts.for) ?? "30m"}.`)
     },
   },
   watch: {

@@ -120,12 +120,14 @@ describe("revert", () => {
           Effect.gen(function* () {
             const c = caller("lea", "claude", "s1")
             const states: Array<Record<string, string>> = [{}]
-            for (const [i, f] of writes.entries()) {
-              const next = { ...states[i], ...f }
-              states.push(next)
-              yield* put(c, "erp.se/sup", i === 0 ? null : i, next)
+            // Writes that change nothing, or that repeat an earlier version, do not land; only versions are kept.
+            for (const f of writes) {
+              const next = { ...states.at(-1), ...f }
+              const result = yield* Effect.result(put(c, "erp.se/sup", states.length === 1 ? null : states.length - 1, next))
+              if (result._tag === "Success" && !result.success.unchanged) states.push(next)
             }
-            const v = (pick % writes.length) + 1
+            if (states.length < 2) return
+            const v = (pick % (states.length - 1)) + 1
             const changed = ContentFields.changed(states[v - 1], states[v])
             const laterTouches = states.slice(v + 1).some((s, j) => ContentFields.changed(states[v + j], s).some((f) => changed.includes(f)))
             const result = yield* Effect.result(Workspace.revert(c, "erp.se/sup", v))
@@ -142,3 +144,30 @@ describe("revert", () => {
     ))
 })
 
+
+describe("a write never silently undoes earlier writes", () => {
+  test("the current content writes nothing, an earlier version's content is refused, anything else is a new version", () =>
+    fc.assert(
+      fc.asyncProperty(fc.array(fc.constantFrom("a", "b", "c", "d"), { minLength: 1, maxLength: 12 }), async (values) => {
+        await runWorkspace(
+          Effect.gen(function* () {
+            const history: string[] = []
+            for (const value of values) {
+              const c = caller("a", "codex", "s1")
+              const result = yield* Effect.result(put(c, "erp.se/p", history.length || null, { price: value }))
+              const current = history.length ? history.at(-1) : undefined
+              if (value === current) {
+                expect(result._tag === "Success" && result.success.unchanged).toBe(true)
+              } else if (history.includes(value)) {
+                expect(result._tag === "Failure" && result.failure._tag).toBe("StaleContent")
+              } else {
+                expect(result._tag === "Success" && result.success.version).toBe(history.length + 1)
+                history.push(value)
+              }
+            }
+          }),
+        )
+      }),
+      { numRuns: 60 },
+    ))
+})

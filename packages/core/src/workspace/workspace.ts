@@ -349,6 +349,18 @@ export const write = (caller: Caller, input: WriteInput) =>
           by: current!.writtenBy as Actor.Info,
         })
       }
+      // The same content as now: nothing to write. Content an earlier version had: a stale copy, refused.
+      if (current && current.content === input.content && input.revertOf === null)
+        return { entry: null, version: currentVersion!, changed: [] as string[], unchanged: true }
+      if (current && input.revertOf === null) {
+        const earlier = (yield* db
+          .select({ version: t.version.version })
+          .from(t.version)
+          .where(and(eq(t.version.key, input.key), eq(t.version.content, input.content)))
+          .orderBy(desc(t.version.version)))[0]
+        if (earlier && earlier.version < currentVersion!)
+          return yield* new Errors.StaleContent({ key: input.key, matches: earlier.version, current: currentVersion! })
+      }
       const before = Object.fromEntries(
         (yield* db.select().from(t.field).where(eq(t.field.key, input.key))).filter((f) => f.value !== null).map((f) => [f.field, f.value as string]),
       )
@@ -396,7 +408,7 @@ export const write = (caller: Caller, input: WriteInput) =>
           set: { title: sql`coalesce(${input.title}, ${t.url.title})`, version, content: input.content, writtenAt: caller.now, writtenBy: caller.actor, seq: entry.seq },
         })
       yield* db.update(t.claim).set({ lastActive: caller.now }).where(eq(t.claim.session, caller.session ?? ""))
-      return { entry, version, changed }
+      return { entry: entry as typeof entry | null, version, changed, unchanged: false }
     }),
   )
 

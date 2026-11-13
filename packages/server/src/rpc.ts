@@ -12,6 +12,7 @@ export type Result<A> = { readonly ok: true; readonly value: A } | { readonly ok
 const AnyError = Schema.Union([
   Errors.KeyHeld,
   Errors.StaleBase,
+  Errors.StaleContent,
   Errors.RevertConflict,
   Errors.TaskTaken,
   Errors.NotFound,

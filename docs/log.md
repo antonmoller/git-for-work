@@ -56,6 +56,8 @@ Expiries, grants to waiters and comments from the browser are the workspace's ow
   filtered to that session (property test).
 - Claims are all or none; writes land iff their base is current; revert is refused exactly when a later write changed
   one of the same fields (property tests).
+- A write never silently undoes another: the current content writes nothing, and an earlier version's content is
+  refused unless it is a revert (property test).
 
 ## Later
 

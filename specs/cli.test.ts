@@ -353,4 +353,40 @@ describe.skipIf(!runnable)("the work CLI", () => {
     expect(readFileSync(join(repo, "AGENTS.md"), "utf8")).toContain("Check `work inbox` when you start")
     expect((await work(K, ["init", "codex", "--codex-home", codexHome, "--command", `bun ${CLI}`], { cwd: repo })).out).toContain("notify already set")
   })
+
+  test("a write never silently undoes another: same content writes nothing, a stale copy is refused, a revert is one step", async () => {
+    const url = `https://${host}/menu.csv`
+    const v1 = "sku,price\nC1,28\nC2,38\n"
+    const v2 = "sku,price\nC1,28\nC2,40\n"
+    expect((await work(K, ["start", "Menu prices"])).code).toBe(0)
+    expect((await work(K, ["put", url, "--base", "new", "--from", "-"], { stdin: v1 })).out).toContain("Wrote v1 (2 rows)")
+    expect((await work(K, ["log", url])).out).not.toContain("3 changed")
+    expect((await work(K, ["put", url, "--from", "-"], { stdin: v1 })).out).toContain("No change: v1 already has this content")
+    expect((await work(K, ["put", url, "--from", "-"], { stdin: v2 })).out).toContain("Wrote v2")
+    // The old copy again: refused, not written as v3.
+    const stale = await work(K, ["put", url, "--from", "-"], { stdin: v1 })
+    expect(stale.code).toBe(1)
+    expect(stale.err).toContain("this is v1's content")
+    // read --out brings a file up to date.
+    const file = join(root, "menu-copy.csv")
+    expect((await work(K, ["read", url, "--out", file])).err).toContain(`saved to ${file}`)
+    expect(readFileSync(file, "utf8")).toBe(v2)
+    // One-step revert.
+    const reverted = await work(K, ["revert", `${url}@v2`, "--put"])
+    expect(reverted.out).toContain("Put back C2,38")
+    expect(reverted.out).toContain("Wrote v3, reverting v2")
+    expect((await work(K, ["done"])).code).toBe(0)
+    // Asked by an agent, the request names the agent.
+    expect((await work(A, ["revert", `${url}@v3`, "--ask", who.k])).code).toBe(0)
+    const inbox = await eventually(() => work(K, ["inbox", "--peek"]), (r) => r.out.includes("revert"))
+    expect(inbox.out).toContain(`${who.a}: revert v3`)
+    // work wait returns as soon as something arrives (whatever was already there is read first).
+    await work(K, ["inbox"])
+    const waiting = work(K, ["wait", "--for", "1m"])
+    await Bun.sleep(1500)
+    expect((await work(A, ["tell", who.k, "Prices look right"])).code).toBe(0)
+    const woke = await waiting
+    expect(woke.code).toBe(0)
+    expect(woke.out).toContain("Prices look right")
+  })
 })

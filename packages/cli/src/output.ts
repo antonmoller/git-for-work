@@ -70,13 +70,16 @@ export const parseVersion = (text: string | undefined): number | null | undefine
 }
 
 /** One log line, as `work log` and `work watch` print them. */
+/** Changed fields, not counting a CSV's header row. */
+const changedCount = (fields: ReadonlyArray<string>) => fields.filter((f) => f !== "#header").length
+
 export const line = (e: Entry.Info) => {
   const key = e.keys[0] ? ` ${e.keys[0]}` : ""
   const by = address(e.actor)
   const what = (() => {
     switch (e.kind) {
       case "write":
-        return e.revertOf ? `wrote v${e.version}, reverting v${e.revertOf}${key}` : `wrote v${e.version}${key}${e.fields.length ? ` (${e.fields.length} changed)` : ""}${e.text ? ` · ${e.text}` : ""}`
+        return e.revertOf ? `wrote v${e.version}, reverting v${e.revertOf}${key}` : `wrote v${e.version}${key}${changedCount(e.fields) ? ` (${changedCount(e.fields)} changed)` : ""}${e.text ? ` · ${e.text}` : ""}`
       case "claim":
         return `${e.text === "after waiting" ? "claimed after waiting" : "claimed"} ${e.keys.join(" ")}`
       case "release":

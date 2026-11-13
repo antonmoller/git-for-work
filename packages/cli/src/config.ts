@@ -68,6 +68,18 @@ const stateFile = (session: string) => file(join("sessions", `${session.replace(
 export const state = (session: string) => readJson<SessionState>(stateFile(session), {})
 export const saveState = (session: string, next: SessionState) => writeJson(stateFile(session), next)
 
+/**
+ * Which session each agent process last ran a command as. Two conversations can share a session (one took over the
+ * other's work); hooks use this to give the inbox to the conversation doing the work, not to whichever reads it first.
+ */
+export type Drivers = Record<string, { session: string; at: number }>
+export const drivers = () => readJson<Drivers>(file("drivers.json"), {})
+export const drive = (pid: number, session: string) => {
+  const all = drivers()
+  if (all[pid]?.session === session && Date.now() - all[pid]!.at < 60e3) return
+  writeJson(file("drivers.json"), { ...all, [pid]: { session, at: Date.now() } })
+}
+
 export const credentialsFile = () => file("credentials.json")
 export const readCredentialsFile = () => readJson<Record<string, string>>(credentialsFile(), {})
 export const writeCredentialsFile = (value: Record<string, string>) => writeJson(credentialsFile(), value)

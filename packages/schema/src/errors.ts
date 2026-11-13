@@ -26,6 +26,20 @@ export class StaleBase extends Schema.TaggedError<StaleBase>()(
   { httpApiStatus: 409 },
 ) {}
 
+/**
+ * The content is an earlier version's, not the base's with changes: writing it would silently undo the versions
+ * since. Usually a stale copy; a deliberate undo is a revert.
+ */
+export class StaleContent extends Schema.TaggedError<StaleContent>()(
+  "StaleContent",
+  {
+    key: Schema.String,
+    matches: Version,
+    current: Version,
+  },
+  { httpApiStatus: 409 },
+) {}
+
 /** A later write changed a field the revert would put back. */
 export class RevertConflict extends Schema.TaggedError<RevertConflict>()(
   "RevertConflict",

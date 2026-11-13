@@ -27,8 +27,9 @@ This project logs agent work with the `work` CLI, so people and other agents see
 
 - Start each task with `work start "<what you are doing, for whom>"`; end it with `work done` or `work fail "<why>"`. Both release your claims.
 - Before you change something others may change too (a file, a doc, a sheet, a record), claim it: `work claim <url or path>`. If it is held, ask the holder with `work ask <url> "<question>"`, or wait with `work claim <url> --wait 10m`.
-- Say what you read with `work read <url>` and write with `work put <url> --from <file>` (a path in this checkout needs no --from). A refusal names who wrote since you read: read again, redo the change on top, then put.
+- Say what you read with `work read <url>` and write with `work put <url> --from <file>` (a path in this checkout needs no --from). A refusal names who wrote since you read: read again, redo the change on top, then put. `work read <path> --out <path>` brings a checkout file up to date with Work.
 - Check `work inbox` when you start and between steps (with Claude Code's hooks, new items appear in your context by themselves). Answer with `work tell <who> "<text>"`; `work note "<text>"` records a decision in your own words.
-- A revert request names its command: run it, apply what it saved, then `work put <url> --revert vN --from <file>`.
+- Waiting on another agent? Run `work wait --for 30m` in the background: it ends when something reaches your inbox, so the answer wakes you instead of waiting for the person to prompt you.
+- A revert request names its command: `work revert <url>@vN --put` puts the old values back and writes the next version.
 - `work help` lists everything. Exit 1 is a refusal to act on, 2 a mistake in the command, 3 means sign in with `work login`.
 <!-- work:end -->

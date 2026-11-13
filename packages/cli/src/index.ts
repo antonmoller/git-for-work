@@ -3,6 +3,8 @@ import { parseArgs } from "node:util"
 import { Account } from "./account.ts"
 import { commands, type Command, type Opts } from "./commands.ts"
 import { Context } from "./context.ts"
+import { Config } from "./config.ts"
+import { Identity } from "./identity.ts"
 import { Init } from "./init.ts"
 import { Exit, EXIT, isJson, setJson } from "./output.ts"
 import { Presence } from "./presence.ts"
@@ -39,6 +41,7 @@ const OPTIONS = {
   scope: { type: "string" },
   "codex-home": { type: "string" },
   peek: { type: "boolean" },
+  put: { type: "boolean" },
   all: { type: "boolean" },
   "from-start": { type: "boolean" },
   create: { type: "boolean" },
@@ -96,6 +99,10 @@ async function main(argv: string[]) {
   if (!command) throw new Exit(EXIT.usage, `No command ${name}. See: work help`)
   if (values.help) return void process.stdout.write(`work ${command.usage}\n  ${command.summary}\n`)
   const ctx = await Context.make(flags)
+  // Note which session this agent process drives, so its hooks deliver that session's inbox here.
+  const own = ctx.who.ownSession ?? ctx.who.session
+  const pid = ctx.who.agent && own && process.env.WORK_DETECT !== "0" ? (ctx.who.pid ?? Identity.detect()?.pid) : null
+  if (pid && own) Config.drive(pid, own)
   try {
     await command.run(ctx, args, opts)
   } finally {

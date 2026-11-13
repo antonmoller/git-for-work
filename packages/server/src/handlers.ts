@@ -233,10 +233,11 @@ const WriteHandlers = HttpApiBuilder.group(Api, "write", (handlers) =>
           s.session.write(s.scope, s.who, { key, title: ctx.payload.title ?? null, base, content: hash, fields, why: ctx.payload.why ?? null, revertOf: ctx.payload.revertOf ?? null, reads: [] }),
           "KeyHeld",
           "StaleBase",
+          "StaleContent",
         )
         // A revert's write ends the revert: the claim `work revert` took is released.
         const released = ctx.payload.revertOf ? (yield* call(() => s.session.release(s.scope, s.who, [key]))).released : []
-        return { entry: result.entry, version: result.version, changed: result.changed, summary: ContentFields.describe(ctx.payload.content, result.changed), released }
+        return { entry: result.entry, unchanged: result.unchanged, version: result.version, changed: result.changed, summary: ContentFields.describe(ctx.payload.content, result.changed), released }
       }),
     )
     .handle("revert", (ctx) =>
@@ -253,7 +254,8 @@ const WriteHandlers = HttpApiBuilder.group(Api, "write", (handlers) =>
         const w = yield* workspaceFor(ctx.params.workspace)
         if (w.caller.role === "viewer") return yield* new Errors.Invalid({ message: "Viewers cannot request a revert" })
         const key = yield* normalize(ctx.payload.url, w.info.rules)
-        const caller = { actor: { ...w.caller.actor, agent: null }, session: null, member: null, trajectory: null, intent: null, now: Date.now() }
+        // From the app it is the person; from an agent (`work revert --ask`) it is that agent, so the receiver knows who asked.
+        const caller = { actor: w.caller.actor, session: null, member: null, trajectory: null, intent: null, now: Date.now() }
         return yield* call(() => w.object.requestRevert(caller, key, ctx.payload.version, ctx.payload.to ?? w.caller.actor.handle))
       }),
     )

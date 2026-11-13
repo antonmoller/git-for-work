@@ -49,9 +49,10 @@ This project logs agent work with the \`work\` CLI, so people and other agents s
 
 - Start each task with \`work start "<what you are doing, for whom>"\`; end it with \`work done\` or \`work fail "<why>"\`. Both release your claims.
 - Before you change something others may change too (a file, a doc, a sheet, a record), claim it: \`work claim <url or path>\`. If it is held, ask the holder with \`work ask <url> "<question>"\`, or wait with \`work claim <url> --wait 10m\`.
-- Say what you read with \`work read <url>\` and write with \`work put <url> --from <file>\` (a path in this checkout needs no --from). A refusal names who wrote since you read: read again, redo the change on top, then put.
+- Say what you read with \`work read <url>\` and write with \`work put <url> --from <file>\` (a path in this checkout needs no --from). A refusal names who wrote since you read: read again, redo the change on top, then put. \`work read <path> --out <path>\` brings a checkout file up to date with Work.
 - Check \`work inbox\` when you start and between steps (with Claude Code's hooks, new items appear in your context by themselves). Answer with \`work tell <who> "<text>"\`; \`work note "<text>"\` records a decision in your own words.
-- A revert request names its command: run it, apply what it saved, then \`work put <url> --revert vN --from <file>\`.
+- Waiting on another agent? Run \`work wait --for 30m\` in the background: it ends when something reaches your inbox, so the answer wakes you instead of waiting for the person to prompt you.
+- A revert request names its command: \`work revert <url>@vN --put\` puts the old values back and writes the next version.
 - \`work help\` lists everything. Exit 1 is a refusal to act on, 2 a mistake in the command, 3 means sign in with \`work login\`.
 ${MARK_END}
 `
@@ -210,9 +211,34 @@ const emit = (event: string, context: string | null) => {
 
 const INBOX_EVERY = 60_000
 
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The session this conversation works in, and whether its inbox is this conversation's to read. A conversation that
+ * took over another's session (by running `work` as it) works there; a session driven more recently by another live
+ * conversation keeps its inbox for that one.
+ */
+function driving(own: string) {
+  const me = process.env.WORK_DETECT === "0" ? null : (Identity.detect()?.pid ?? null)
+  const all = Config.drivers()
+  const session = (me && all[me]?.session) || own
+  const latest = Object.entries(all)
+    .filter(([pid, d]) => d.session === session && alive(Number(pid)))
+    .sort((a, b) => b[1].at - a[1].at)[0]
+  return { session, readsInbox: !latest || !me || Number(latest[0]) === me }
+}
+
 async function claudeHook(event: string, input: ClaudeInput) {
   if (!input.session_id) return
-  const session = `claude-${input.session_id}`
+  const own = `claude-${input.session_id}`
+  const { session, readsInbox } = driving(own)
   if (input.cwd) process.chdir(input.cwd)
   if (event === "session-start" && process.env.CLAUDE_ENV_FILE) {
     const lines = `export WORK_AGENT=claude\nexport WORK_SESSION=${session}\n`
@@ -220,8 +246,8 @@ async function claudeHook(event: string, input: ClaudeInput) {
     if (!existing.includes(lines)) writeFileSync(process.env.CLAUDE_ENV_FILE, existing + lines)
   }
   if (event === "session-end") {
-    Presence.leave(session)
-    Presence.absent(session)
+    Presence.leave(own)
+    Presence.absent(own)
   }
   let ctx: Awaited<ReturnType<typeof Context.make>>
   try {
@@ -243,14 +269,15 @@ async function claudeHook(event: string, input: ClaudeInput) {
       await ctx.call((c) => c.session.flush({ params }))
       return
     }
-    // The inbox: every prompt and session start, and at most once a minute between tool calls.
-    const own = ctx.who.ownSession ?? session
-    const state = Config.state(own)
-    if (event === "tool" && Date.now() - (state.inboxCheckedAt ?? 0) < INBOX_EVERY) return
-    Config.saveState(own, { ...Config.state(own), inboxCheckedAt: Date.now() })
-    const inbox = await ctx.call<{ items: Entry.Info[] }>((c) => c.log.inbox({ params, query: {} }))
+    // The inbox: every prompt and session start, and at most once a minute between tool calls. Only the conversation
+    // that drives the session reads it, so a message never lands in a conversation that has moved on.
     const name = event === "session-start" ? "SessionStart" : event === "prompt" ? "UserPromptSubmit" : "PostToolUse"
     const intro = event === "session-start" ? `Work: this session is ${session} in workspace ${workspace}.${ctx.who.ownSession ? ` It has joined ${ctx.who.session}.` : ""}` : null
+    const mine = ctx.who.ownSession ?? session
+    const state = Config.state(mine)
+    if (!readsInbox || (event === "tool" && Date.now() - (state.inboxCheckedAt ?? 0) < INBOX_EVERY)) return emit(name, intro)
+    Config.saveState(mine, { ...Config.state(mine), inboxCheckedAt: Date.now() })
+    const inbox = await ctx.call<{ items: Entry.Info[] }>((c) => c.log.inbox({ params, query: {} }))
     emit(name, [intro, inbox.items.length ? inboxText(inbox.items) : null].filter(Boolean).join("\n\n") || null)
   } finally {
     ctx.dispose()
