@@ -205,3 +205,4 @@ pre.content-view { margin: 12px 16px; padding: 12px 14px; border-radius: 10px; b
 
 /* diffs (Pierre) */
 .diff { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 12px; --diffs-font-family: var(--mono); }
+.diff.loading { height: 48px; background: var(--well); }
