@@ -121,6 +121,7 @@
       "name": "@work/specs",
       "dependencies": {
         "@work/client": "workspace:*",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
