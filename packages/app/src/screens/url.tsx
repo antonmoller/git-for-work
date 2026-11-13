@@ -1,3 +1,4 @@
+import { Change } from "../diff.tsx"
 import { useState } from "react"
 import type { Views } from "@work/schema/views"
 import type { Write } from "@work/schema/write"
@@ -199,22 +200,7 @@ function VersionPanel({ v, urlKey, latest }: { v: Write.Version_; urlKey: string
               </>
             )}
           </div>
-          {fields.length > 0 && (
-            <div className="mini">
-              <div className="grid" style={{ ["--cols" as string]: "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)" }}>
-                <span className="gh">Field</span>
-                <span className="gh">Before</span>
-                <span className="gh">After</span>
-                {fields.slice(0, 16).map((f) => (
-                  <span key={f} style={{ display: "contents" }}>
-                    <span className="mono">{f}</span>
-                    <span className="dim">{v.before[f] ?? "none"}</span>
-                    <span className="med">{v.after[f] ?? "removed"}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+          {fields.length > 0 && <Change k={urlKey} changed={fields} before={v.before} after={v.after} />}
           <div className="row">
             <button className="btn sm" onClick={requestRevert} disabled={asked === "Asking…"}>Revert this write</button>
             {v.session && v.trajectory && (

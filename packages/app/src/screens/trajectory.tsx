@@ -1,3 +1,4 @@
+import { Change } from "../diff.tsx"
 import { useEffect, useState } from "react"
 import { WorkSocket } from "@work/client"
 import type { Entry } from "@work/schema/entry"
@@ -276,33 +277,14 @@ function StepRow({ e, names, owner, last }: { e: Step; names: Map<string, string
   )
 }
 
-/** The fields a write changed, before and after. */
+/** What a write changed, as a diff. */
 function Diff({ k, version }: { k: string; version: number }) {
   const live = useLive()
   const v = useLoad(() => call<{ version: Write.Version_ }>((c) => c.write.version({ params: { workspace: live.workspace }, query: { url: `https://${k}`, version } })), [k, version])
   if (!v.data) return null
-  const fields = v.data.version.changed
-  return (
-    <div className="mini">
-      <div className="grid" style={{ ["--cols" as string]: "minmax(90px, 0.6fr) minmax(0, 1fr) minmax(0, 1fr)" }}>
-        <span className="gh">Field</span>
-        <span className="gh">Before</span>
-        <span className="gh">After</span>
-        {fields.slice(0, 12).map((f) => (
-          <Row key={f} f={f} before={v.data!.version.before[f] ?? null} after={v.data!.version.after[f] ?? null} />
-        ))}
-      </div>
-    </div>
-  )
+  const { changed, before, after } = v.data.version
+  return <Change k={k} changed={changed} before={before} after={after} />
 }
-
-const Row = ({ f, before, after }: { f: string; before: string | null; after: string | null }) => (
-  <>
-    <span className="mono">{f}</span>
-    <span>{before === null ? <span className="dim">none</span> : <s>{before}</s>}</span>
-    <span>{after === null ? <span className="dim">removed</span> : <span className="newv">{after}</span>}</span>
-  </>
-)
 
 export function Compose({ placeholder, hint, send }: { placeholder: string; hint?: string; send: (text: string) => Promise<unknown> }) {
   const [text, setText] = useState("")
