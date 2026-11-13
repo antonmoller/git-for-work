@@ -34,9 +34,23 @@ export class SessionObject extends DurableObject<Env> {
     return stub(this.env.WORKSPACE, names.workspace(scope.org, scope.workspace))
   }
 
-  private async ready(scope: Scope) {
-    if (this.runtime) return this.runtime
+  private starting: Promise<ManagedRuntime.ManagedRuntime<Services, never>> | null = null
+
+  /**
+   * The runtime, after repair and a flush. Every call waits for the same start, so none records an event before the
+   * workspace's decisions this object missed are back: a new event would otherwise take an aseq the workspace holds.
+   */
+  private ready(scope: Scope) {
+    this.starting ??= this.boot(scope).catch((error) => {
+      this.starting = null
+      throw error
+    })
+    return this.starting
+  }
+
+  private async boot(scope: Scope) {
     this.scope = scope
+    await this.ctx.storage.put("scope", scope)
     const workspace = this.workspace(scope)
     const link = Layer.succeed(
       Session.Link,
@@ -51,9 +65,10 @@ export class SessionObject extends DurableObject<Env> {
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(Database.layer("session").pipe(Layer.provide(sqliteLayer({ storage: this.ctx.storage as unknown as SqliteStorage }))), Session.lockLayer, link),
     )
-    this.runtime = runtime
     // Take back anything the workspace decided that this object never recorded, then flush what is pending.
-    await runtime.runPromise(Effect.andThen(Session.repair, Session.flush))
+    await runtime.runPromise(Session.repair)
+    this.runtime = runtime
+    await runtime.runPromiseExit(Session.flush)
     return runtime
   }
 
@@ -64,10 +79,13 @@ export class SessionObject extends DurableObject<Env> {
     return result
   }
 
+  /** Flushes what is pending. After eviction the object starts again from the scope it stored. */
   async alarm() {
-    if (!this.runtime) return
-    const flushed = await this.runtime.runPromiseExit(Session.flush)
-    const pending = await this.runtime.runPromise(Effect.map(Session.events(await this.runtime.runPromise(Session.flushed)), (e) => e.length))
+    const scope = this.scope ?? ((await this.ctx.storage.get("scope")) as Scope | undefined)
+    if (!scope) return
+    const runtime = await this.ready(scope)
+    const flushed = await runtime.runPromiseExit(Session.flush)
+    const pending = await runtime.runPromise(Effect.map(Session.events(await runtime.runPromise(Session.flushed)), (e) => e.length))
     if (flushed._tag === "Failure" || pending > 0) await this.ctx.storage.setAlarm(Date.now() + FLUSH_DELAY * 5)
   }
 
@@ -225,7 +243,6 @@ export class SessionObject extends DurableObject<Env> {
     const scope = JSON.parse(request.headers.get("x-work-scope")!) as Scope
     const caller = JSON.parse(request.headers.get("x-work-member")!) as { actor: Actor.Info; kind: "agent" | "person" }
     const runtime = await this.ready(scope)
-    await this.ctx.storage.put("scope", scope)
     const owner = await runtime.runPromise(Session.claimOwner(caller.actor))
     const address = Actor.address(caller.actor)
     const member: SessionSchema.Member = {
