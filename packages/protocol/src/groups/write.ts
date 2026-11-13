@@ -21,7 +21,10 @@ export const WriteGroup = HttpApiGroup.make("write")
       payload: Schema.Struct({
         url: Schema.String,
         title: Schema.optional(Schema.String),
-        /** Omitted: the version this session last read. Null: the URL has no versions yet. */
+        /**
+         * Omitted: the version this session last read or wrote. Null: the URL has no versions yet. Leave the key out
+         * rather than passing undefined: the JSON codec sends undefined as null.
+         */
         base: Schema.optional(Schema.NullOr(Schema.Int)),
         content: Schema.String,
         why: Schema.optional(Schema.String),

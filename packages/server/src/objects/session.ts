@@ -18,6 +18,7 @@ export interface Scope {
 }
 
 const FLUSH_DELAY = 2_000
+const SHARED: ReadonlySet<string> = new Set(["ask", "tell", "handoff", "comment", "task.add", "task.done"])
 
 type Services = Database.Service | Session.Link | Session.Lock
 
@@ -129,14 +130,18 @@ export class SessionObject extends DurableObject<Env> {
     )
   }
 
-  record(scope: Scope, who: Session.Who, draft: Parameters<typeof Session.record>[1]) {
-    return this.run(
+  async record(scope: Scope, who: Session.Who, draft: Parameters<typeof Session.record>[1]) {
+    const result = await this.run(
       scope,
       Effect.gen(function* () {
         yield* Session.claimOwner(who.actor)
         return yield* Session.record(who, draft)
       }),
     )
+    // Messages and tasks are for others: they go to the workspace now, not at the next alarm. A failed flush is
+    // retried by the alarm.
+    if (result.ok && SHARED.has(draft.kind)) await this.run(scope, Session.flush)
+    return result
   }
 
   end(scope: Scope, who: Session.Who, status: "done" | "failed", why: string | null) {
@@ -156,11 +161,11 @@ export class SessionObject extends DurableObject<Env> {
     return this.run(scope, Effect.map(Session.flush, (flushed) => ({ flushed })))
   }
 
-  /** The version of `key` this session last read, for a write that does not name its base. */
+  /** The version of `key` this session last read or wrote, for a write that does not name its base. */
   lastRead(scope: Scope, key: string) {
     return this.run(
       scope,
-      Effect.map(Session.events(), (events) => events.filter((e) => e.kind === "read" && e.keys.includes(key as never)).at(-1)?.version ?? undefined),
+      Effect.map(Session.events(), (events) => events.filter((e) => (e.kind === "read" || e.kind === "write") && e.keys.includes(key as never)).at(-1)?.version ?? undefined),
     )
   }
 
