@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "7c856320-d359-4d84-aa58-125f3ae59331",
+  "id": "81d4cb6a-f8ad-4c89-abd0-6a44ba75e10a",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -12,6 +12,10 @@
     },
     {
       "name": "cursor",
+      "entityType": "tables"
+    },
+    {
+      "name": "drain",
       "entityType": "tables"
     },
     {
@@ -155,6 +159,56 @@
       "name": "seq",
       "entityType": "columns",
       "table": "cursor"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "drain"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "seq",
+      "entityType": "columns",
+      "table": "drain"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "hash",
+      "entityType": "columns",
+      "table": "drain"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "in_flight",
+      "entityType": "columns",
+      "table": "drain"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "drain"
     },
     {
       "type": "integer",
@@ -353,6 +407,16 @@
       "default": null,
       "generated": null,
       "name": "hash",
+      "entityType": "columns",
+      "table": "entry"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "drained",
       "entityType": "columns",
       "table": "entry"
     },
@@ -1046,6 +1110,15 @@
     },
     {
       "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "drain_pk",
+      "table": "drain",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
         "seq"
       ],
       "nameExplicit": false,
@@ -1111,6 +1184,24 @@
       "name": "claim_session",
       "entityType": "indexes",
       "table": "claim"
+    },
+    {
+      "columns": [
+        {
+          "value": "drained",
+          "isExpression": false
+        },
+        {
+          "value": "seq",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "entry_drained",
+      "entityType": "indexes",
+      "table": "entry"
     },
     {
       "columns": [

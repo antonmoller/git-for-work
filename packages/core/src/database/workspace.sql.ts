@@ -1,5 +1,7 @@
 import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core"
 
+// The workspace object's tables. The entry table is the acked commit point and the outbox: entries are
+// drained to the long-term log (docs/log.md) and trimmed past a hot-retention window.
 // The workspace object's tables. One object per workspace: it is the only sequencer.
 // JSON columns hold schema-validated values (actors, key lists); they are decoded at the edge of core.
 
@@ -26,8 +28,10 @@ export const entry = sqliteTable(
     task: integer("task"),
     prev: text("prev").notNull(),
     hash: text("hash").notNull(),
+    /** Set once the entry is durable in the workspace's long-term log (docs/log.md). Drained rows are trimmed later. */
+    drained: integer("drained").notNull().default(0),
   },
-  (t) => [index("entry_session").on(t.session), index("entry_to").on(t.to), index("entry_at").on(t.at)],
+  (t) => [index("entry_drained").on(t.drained, t.seq), index("entry_session").on(t.session), index("entry_to").on(t.to), index("entry_at").on(t.at)],
 )
 
 /** Every URL that was ever written or claimed: its current version and title. */
@@ -148,4 +152,13 @@ export const presence = sqliteTable("presence", {
 export const cursor = sqliteTable("cursor", {
   session: text("session").primaryKey(),
   seq: integer("seq").notNull(),
+})
+
+/** Where the drain to the long-term log stands. One row, id 1. */
+export const drain = sqliteTable("drain", {
+  id: integer("id").primaryKey(),
+  seq: integer("seq").notNull(),
+  hash: text("hash").notNull(),
+  inFlight: integer("in_flight").notNull(),
+  updatedAt: integer("updated_at").notNull(),
 })

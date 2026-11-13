@@ -20,21 +20,21 @@ describe("URL normalization", () => {
   test("is idempotent", () =>
     fc.assert(fc.property(url, (u) => {
       const k = KeyNormalize.normalize(render(u))
-      expect(KeyNormalize.normalize(k)).toBe(k)
+      expect<string>(KeyNormalize.normalize(k)).toBe(k)
     })))
 
   test("ignores scheme, host case, www, trailing slash, parameter order and tracking parameters", () =>
     fc.assert(fc.property(url, fc.record({ scheme: fc.constantFrom("", "http://", "https://", "HTTPS://"), upper: fc.boolean(), www: fc.boolean(), slash: fc.boolean(), reverse: fc.boolean(), utm: fc.boolean() }), (u, opts) => {
-      expect(KeyNormalize.normalize(render(u, opts))).toBe(KeyNormalize.normalize(render(u)))
+      expect<string>(KeyNormalize.normalize(render(u, opts))).toBe(KeyNormalize.normalize(render(u)))
     })))
 
   test("drops trailing views and keeps fragments that name a part", () => {
-    expect(KeyNormalize.normalize("https://docs.google.com/document/d/1Kp9/edit?usp=sharing#heading=h.supp")).toBe("docs.google.com/document/d/1Kp9#heading=h.supp")
-    expect(KeyNormalize.normalize("ERP.holm.se/suppliers/")).toBe("erp.holm.se/suppliers")
+    expect<string>(KeyNormalize.normalize("https://docs.google.com/document/d/1Kp9/edit?usp=sharing#heading=h.supp")).toBe("docs.google.com/document/d/1Kp9#heading=h.supp")
+    expect<string>(KeyNormalize.normalize("ERP.holm.se/suppliers/")).toBe("erp.holm.se/suppliers")
   })
 
   test("applies workspace rules", () => {
-    expect(KeyNormalize.normalize("erp.holm.se/p?id=1&sess=9", [{ host: "erp.holm.se", keepParams: ["id"] }])).toBe("erp.holm.se/p?id=1")
+    expect<string>(KeyNormalize.normalize("erp.holm.se/p?id=1&sess=9", [{ host: "erp.holm.se", keepParams: ["id"] }])).toBe("erp.holm.se/p?id=1")
   })
 
   test("refuses what is not a URL", () => {

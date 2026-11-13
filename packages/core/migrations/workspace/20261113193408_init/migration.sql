@@ -15,6 +15,14 @@ CREATE TABLE `cursor` (
 	`seq` integer NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE `drain` (
+	`id` integer PRIMARY KEY,
+	`seq` integer NOT NULL,
+	`hash` text NOT NULL,
+	`in_flight` integer NOT NULL,
+	`updated_at` integer NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE `entry` (
 	`seq` integer PRIMARY KEY,
 	`at` integer NOT NULL,
@@ -35,7 +43,8 @@ CREATE TABLE `entry` (
 	`ref` integer,
 	`task` integer,
 	`prev` text NOT NULL,
-	`hash` text NOT NULL
+	`hash` text NOT NULL,
+	`drained` integer DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `field` (
@@ -127,6 +136,7 @@ CREATE TABLE `waiter` (
 );
 --> statement-breakpoint
 CREATE INDEX `claim_session` ON `claim` (`session`);--> statement-breakpoint
+CREATE INDEX `entry_drained` ON `entry` (`drained`,`seq`);--> statement-breakpoint
 CREATE INDEX `entry_session` ON `entry` (`session`);--> statement-breakpoint
 CREATE INDEX `entry_to` ON `entry` (`to`);--> statement-breakpoint
 CREATE INDEX `entry_at` ON `entry` (`at`);

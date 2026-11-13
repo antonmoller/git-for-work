@@ -20,6 +20,8 @@ export const Kind = Schema.Literals([
   "handoff",
   "ask",
   "tell",
+  "trajectory.start",
+  "trajectory.end",
 ])
 export type Kind = typeof Kind.Type
 

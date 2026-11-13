@@ -11,11 +11,12 @@ export const migrations = {
   ],
   "workspace": [
     {
-      "id": "20261113192747_init",
+      "id": "20261113193408_init",
       "statements": [
         "CREATE TABLE `claim` (\n\t`key` text PRIMARY KEY,\n\t`title` text,\n\t`session` text NOT NULL,\n\t`trajectory` text,\n\t`intent` text,\n\t`holder` text NOT NULL,\n\t`member` text NOT NULL,\n\t`since` integer NOT NULL,\n\t`last_active` integer NOT NULL\n);",
         "CREATE TABLE `cursor` (\n\t`session` text PRIMARY KEY,\n\t`seq` integer NOT NULL\n);",
-        "CREATE TABLE `entry` (\n\t`seq` integer PRIMARY KEY,\n\t`at` integer NOT NULL,\n\t`kind` text NOT NULL,\n\t`actor` text NOT NULL,\n\t`member` text,\n\t`session` text,\n\t`trajectory` text,\n\t`keys` text NOT NULL,\n\t`title` text,\n\t`version` integer,\n\t`base` integer,\n\t`content` text,\n\t`fields` text NOT NULL,\n\t`revert_of` integer,\n\t`text` text,\n\t`to` text,\n\t`ref` integer,\n\t`task` integer,\n\t`prev` text NOT NULL,\n\t`hash` text NOT NULL\n);",
+        "CREATE TABLE `drain` (\n\t`id` integer PRIMARY KEY,\n\t`seq` integer NOT NULL,\n\t`hash` text NOT NULL,\n\t`in_flight` integer NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
+        "CREATE TABLE `entry` (\n\t`seq` integer PRIMARY KEY,\n\t`at` integer NOT NULL,\n\t`kind` text NOT NULL,\n\t`actor` text NOT NULL,\n\t`member` text,\n\t`session` text,\n\t`trajectory` text,\n\t`keys` text NOT NULL,\n\t`title` text,\n\t`version` integer,\n\t`base` integer,\n\t`content` text,\n\t`fields` text NOT NULL,\n\t`revert_of` integer,\n\t`text` text,\n\t`to` text,\n\t`ref` integer,\n\t`task` integer,\n\t`prev` text NOT NULL,\n\t`hash` text NOT NULL,\n\t`drained` integer DEFAULT 0 NOT NULL\n);",
         "CREATE TABLE `field` (\n\t`key` text NOT NULL,\n\t`field` text NOT NULL,\n\t`value` text,\n\t`version` integer NOT NULL,\n\tCONSTRAINT `field_pk` PRIMARY KEY(`key`, `field`)\n);",
         "CREATE TABLE `presence` (\n\t`session` text PRIMARY KEY,\n\t`owner` text NOT NULL,\n\t`members` text NOT NULL,\n\t`last_active` integer NOT NULL\n);",
         "CREATE TABLE `task` (\n\t`id` integer PRIMARY KEY,\n\t`title` text NOT NULL,\n\t`status` text NOT NULL,\n\t`created_by` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`from_trajectory` text,\n\t`to` text,\n\t`taker` text,\n\t`taken_at` integer,\n\t`done_at` integer\n);",
@@ -24,6 +25,7 @@ export const migrations = {
         "CREATE TABLE `version` (\n\t`key` text NOT NULL,\n\t`version` integer NOT NULL,\n\t`seq` integer NOT NULL,\n\t`at` integer NOT NULL,\n\t`actor` text NOT NULL,\n\t`session` text,\n\t`trajectory` text,\n\t`intent` text,\n\t`why` text,\n\t`base` integer,\n\t`content` text NOT NULL,\n\t`changed` text NOT NULL,\n\t`before` text NOT NULL,\n\t`after` text NOT NULL,\n\t`revert_of` integer,\n\t`reads` text NOT NULL,\n\tCONSTRAINT `version_pk` PRIMARY KEY(`key`, `version`)\n);",
         "CREATE TABLE `waiter` (\n\t`id` integer PRIMARY KEY,\n\t`keys` text NOT NULL,\n\t`titles` text NOT NULL,\n\t`session` text NOT NULL,\n\t`trajectory` text,\n\t`intent` text,\n\t`actor` text NOT NULL,\n\t`member` text NOT NULL,\n\t`since` integer NOT NULL,\n\t`deadline` integer NOT NULL,\n\t`status` text NOT NULL,\n\t`seq` integer\n);",
         "CREATE INDEX `claim_session` ON `claim` (`session`);",
+        "CREATE INDEX `entry_drained` ON `entry` (`drained`,`seq`);",
         "CREATE INDEX `entry_session` ON `entry` (`session`);",
         "CREATE INDEX `entry_to` ON `entry` (`to`);",
         "CREATE INDEX `entry_at` ON `entry` (`at`);"
