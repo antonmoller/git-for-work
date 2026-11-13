@@ -236,7 +236,7 @@ const WriteHandlers = HttpApiBuilder.group(Api, "write", (handlers) =>
         )
         // A revert's write ends the revert: the claim `work revert` took is released.
         const released = ctx.payload.revertOf ? (yield* call(() => s.session.release(s.scope, s.who, [key]))).released : []
-        return { entry: result.entry, version: result.version, changed: result.changed, summary: ContentFields.describe(ctx.payload.content, result.changed.length), released }
+        return { entry: result.entry, version: result.version, changed: result.changed, summary: ContentFields.describe(ctx.payload.content, result.changed), released }
       }),
     )
     .handle("revert", (ctx) =>
