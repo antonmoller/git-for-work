@@ -1,0 +1,24 @@
+// The Worker and its objects. Local development: `bun run dev` (DEV_AUTH comes from .dev.vars, which is ignored).
+// Deployed stages are added under `env` once Anton has chosen the account, domain and R2 jurisdiction.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "work-api",
+  "main": "../../packages/server/src/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      { "name": "ORGANIZATION", "class_name": "OrganizationObject" },
+      { "name": "WORKSPACE", "class_name": "WorkspaceObject" },
+      { "name": "SESSION", "class_name": "SessionObject" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["OrganizationObject", "WorkspaceObject", "SessionObject"] }],
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "work-blobs-local" }],
+  "vars": {
+    "STAGE": "local",
+    "PUBLIC_URL": "",
+    "WORKOS_CLIENT_ID": "client_local"
+  },
+  "observability": { "enabled": true }
+}

@@ -2,8 +2,26 @@
   "name": "@work/server",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts", "./*": "./src/*.ts" },
-  "scripts": { "test": "bun test", "typecheck": "tsc -p tsconfig.json" },
-  "dependencies": { "@work/schema": "workspace:*", "@work/protocol": "workspace:*", "@work/core": "workspace:*", "effect": "catalog:", "drizzle-orm": "catalog:", "jose": "catalog:" },
-  "devDependencies": { "@types/bun": "catalog:", "typescript": "catalog:" , "@cloudflare/workers-types": "catalog:" }
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@work/schema": "workspace:*",
+    "@work/protocol": "workspace:*",
+    "@work/core": "workspace:*",
+    "effect": "catalog:",
+    "drizzle-orm": "catalog:",
+    "jose": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "24.12.2",
+    "typescript": "catalog:"
+  }
 }
