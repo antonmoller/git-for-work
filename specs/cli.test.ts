@@ -279,6 +279,13 @@ describe.skipIf(!runnable)("the work CLI", () => {
     expect(diff.out).toContain("v1 → v2: 1 change")
     expect(diff.out).toContain("+ B-12:")
     expect((await work(K, ["done"], { cwd: repo })).out).toContain("Released github.com/holm/pricing/blob/main/prices.csv")
+
+    // A checkout with no remote is named by its folder.
+    const local = join(root, "Local Notes")
+    mkdirSync(local, { recursive: true })
+    Bun.spawnSync(["git", "init", "-q", "-b", "main"], { cwd: local })
+    writeFileSync(join(local, "todo.md"), "- ship\n")
+    expect((await work(K, ["who", "todo.md"], { cwd: local })).out).toContain("local-notes.local/blob/main/todo.md")
   })
 
   test("init claude sets up hooks once, and the hooks log tool calls without contents", async () => {
@@ -343,7 +350,7 @@ describe.skipIf(!runnable)("the work CLI", () => {
     expect(toml.startsWith(`notify = ["bun", "${CLI}", "hook", "codex", "notify"]\n`)).toBe(true)
     expect(toml).toContain("[profiles.fast]")
     expect(existsSync(join(repo, "AGENTS.md"))).toBe(true)
-    expect(readFileSync(join(repo, "AGENTS.md"), "utf8")).toContain("Run `work inbox` when you start")
+    expect(readFileSync(join(repo, "AGENTS.md"), "utf8")).toContain("Check `work inbox` when you start")
     expect((await work(K, ["init", "codex", "--codex-home", codexHome, "--command", `bun ${CLI}`], { cwd: repo })).out).toContain("notify already set")
   })
 })

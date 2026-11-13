@@ -9,7 +9,9 @@ const processInfo = (pid: number) => {
   const out = Bun.spawnSync(["ps", "-o", "ppid=,lstart=,comm=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore" }).stdout.toString().trim()
   const match = out.match(/^(\d+)\s+(\w{3}\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4})\s+(.+)$/)
   if (!match) return null
-  return { ppid: Number(match[1]), started: Date.parse(match[2]!) || 0, comm: match[3]!.split("/").at(-1)!.toLowerCase() }
+  // Case matters: Claude Code's process is `claude`, the Claude desktop app's is `Claude`, and a terminal inside the
+  // desktop app is a person's, not an agent's.
+  return { ppid: Number(match[1]), started: Date.parse(match[2]!) || 0, comm: match[3]!.split("/").at(-1)! }
 }
 
 /**

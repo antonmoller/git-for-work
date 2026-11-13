@@ -1,6 +1,6 @@
 export * as Init from "./init.ts"
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, relative, resolve } from "node:path"
 import type { Entry } from "@work/schema/entry"
@@ -26,14 +26,23 @@ const commandLine = (opts: Opts) => {
   if (given) return given
   const self = Presence.self()
   const onPath = Bun.which("work")
-  if (onPath && self.length === 1 && resolve(onPath) === resolve(self[0]!)) return "work"
+  const real = (p: string) => {
+    try {
+      return realpathSync(p)
+    } catch {
+      return resolve(p)
+    }
+  }
+  // `work` on the PATH is this CLI (the binary, or a link to the script): hooks call it by name.
+  if (onPath && real(onPath) === real(self.at(-1)!)) return "work"
   return self.map(quote).join(" ")
 }
 
 const MARK_START = "<!-- work:start -->"
 const MARK_END = "<!-- work:end -->"
 
-const instructions = (agent: "claude" | "codex") => `${MARK_START}
+/** One section for every agent: Claude and Codex read the same instructions, whichever file holds them. */
+const instructions = `${MARK_START}
 ## Work log
 
 This project logs agent work with the \`work\` CLI, so people and other agents see what was done, by whom and why, and nobody overwrites anyone.
@@ -41,7 +50,7 @@ This project logs agent work with the \`work\` CLI, so people and other agents s
 - Start each task with \`work start "<what you are doing, for whom>"\`; end it with \`work done\` or \`work fail "<why>"\`. Both release your claims.
 - Before you change something others may change too (a file, a doc, a sheet, a record), claim it: \`work claim <url or path>\`. If it is held, ask the holder with \`work ask <url> "<question>"\`, or wait with \`work claim <url> --wait 10m\`.
 - Say what you read with \`work read <url>\` and write with \`work put <url> --from <file>\` (a path in this checkout needs no --from). A refusal names who wrote since you read: read again, redo the change on top, then put.
-- ${agent === "claude" ? "Your tool calls are logged by hooks, and new inbox items appear in your context." : "Run `work inbox` when you start and between steps."} Answer questions with \`work tell <who> "<text>"\`; \`work note "<text>"\` records a decision in your own words.
+- Check \`work inbox\` when you start and between steps (with Claude Code's hooks, new items appear in your context by themselves). Answer with \`work tell <who> "<text>"\`; \`work note "<text>"\` records a decision in your own words.
 - A revert request names its command: run it, apply what it saved, then \`work put <url> --revert vN --from <file>\`.
 - \`work help\` lists everything. Exit 1 is a refusal to act on, 2 a mistake in the command, 3 means sign in with \`work login\`.
 ${MARK_END}
@@ -114,11 +123,12 @@ export async function init(_flags: Flags, [agent]: string[], opts: Opts) {
         : join(dir, ".claude", scope === "local" ? "settings.local.json" : "settings.json")
     if (!["project", "local", "user"].includes(scope)) throw new Exit(EXIT.usage, "--scope is project, local or user")
     done.push(`${mergeClaudeSettings(file, command) ? "Added hooks to" : "Hooks already in"} ${relative(process.cwd(), file) || file}`)
-    const md = join(dir, "CLAUDE.md")
-    done.push(`${writeBlock(md, instructions("claude")) ? "Wrote the Work section in" : "Work section already in"} ${relative(process.cwd(), md) || md}`)
+    // Claude Code reads AGENTS.md when there is no CLAUDE.md; one file of instructions is enough.
+    const md = join(dir, !existsSync(join(dir, "CLAUDE.md")) && existsSync(join(dir, "AGENTS.md")) ? "AGENTS.md" : "CLAUDE.md")
+    done.push(`${writeBlock(md, instructions) ? "Wrote the Work section in" : "Work section already in"} ${relative(process.cwd(), md) || md}`)
   } else if (agent === "codex") {
     const md = join(dir, "AGENTS.md")
-    done.push(`${writeBlock(md, instructions("codex")) ? "Wrote the Work section in" : "Work section already in"} ${relative(process.cwd(), md) || md}`)
+    done.push(`${writeBlock(md, instructions) ? "Wrote the Work section in" : "Work section already in"} ${relative(process.cwd(), md) || md}`)
     const config = join(str(opts["codex-home"]) ?? process.env.CODEX_HOME ?? join(homedir(), ".codex"), "config.toml")
     const result = addCodexNotify(config, command)
     done.push(
