@@ -84,7 +84,7 @@ async function main(argv: string[]) {
   if (!name || name === "help" || (values.help && !name)) return help()
   if (name === "__presence") {
     const ctx = await Context.make(flags)
-    return Presence.hold(ctx, args[0]!, args[1]!, Number(args[2] ?? 0))
+    return Presence.hold(ctx, args[0]!, args[1]!, Number(args[2] ?? 0), args[3] === "own" ? "own" : "joined")
   }
   if (name === "init") return Init.init(flags, args, opts)
   const bare = Account.commands[name]

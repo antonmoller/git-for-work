@@ -10,6 +10,7 @@ import type { Write } from "@work/schema/write"
 import { Config } from "./config.ts"
 import type { Ctx } from "./context.ts"
 import { Exit, EXIT, address, clock, info, isJson, label, line, parseDuration, parseVersion, print } from "./output.ts"
+import { attend } from "./presence.ts"
 import { Target } from "./target.ts"
 
 export type Opts = Record<string, string | boolean | undefined>
@@ -105,6 +106,7 @@ export const commands: Record<string, Command> = {
       ctx.needSession()
       const workspace = await ctx.workspace()
       const e = await ctx.call<Entry.Event>((c) => c.session.start({ params: { workspace }, payload: { intent: need(intent, this.usage), for: str(opts.for) } }))
+      attend(ctx, workspace)
       const data = (e.data ?? {}) as { forName?: string }
       print(`Started ${e.trajectory} for ${data.forName ?? e.actor.name}.`, e)
     },

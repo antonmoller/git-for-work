@@ -5,6 +5,7 @@ import { WorkSocket } from "@work/client"
 import type { Session } from "@work/schema/session"
 import type { Views } from "@work/schema/views"
 import { Config } from "./config.ts"
+import { Identity } from "./identity.ts"
 import type { Ctx } from "./context.ts"
 import type { Command } from "./commands.ts"
 import { Exit, EXIT, clock, info, print } from "./output.ts"
@@ -31,6 +32,33 @@ export function leave(own: string) {
   const { joined, ...rest } = state
   Config.saveState(own, rest)
   return joined
+}
+
+/** Keeps the agent present in its own session while its process runs, so people see it connected. Idempotent. */
+export function attend(ctx: Ctx, workspace: string) {
+  const own = ctx.who.ownSession ?? ctx.who.session
+  if (!own || !ctx.who.agent) return
+  const present = Config.state(own).present
+  if (present?.pid && present.workspace === workspace && alive(present.pid)) return
+  // Without the agent's process there is nothing to end the presence with, so none is held.
+  const agentPid = ctx.who.pid ?? (process.env.WORK_DETECT === "0" ? null : Identity.detect()?.pid)
+  if (!agentPid) return
+  const child = spawn(self()[0]!, [...self().slice(1), "__presence", workspace, own, String(agentPid), "own"], {
+    detached: true,
+    stdio: "ignore",
+    env: { ...process.env, WORK_AGENT: ctx.who.agent, WORK_SESSION: own, WORK_URL: ctx.url },
+  })
+  child.unref()
+  Config.saveState(own, { ...Config.state(own), present: { workspace, pid: child.pid ?? null, at: Date.now() } })
+}
+
+/** Ends the agent's presence in its own session. */
+export function absent(own: string) {
+  const state = Config.state(own)
+  if (!state.present) return
+  if (state.present.pid && alive(state.present.pid)) process.kill(state.present.pid, "SIGTERM")
+  const { present, ...rest } = state
+  Config.saveState(own, rest)
 }
 
 export const commands: Record<string, Command> = {
@@ -97,16 +125,20 @@ export const commands: Record<string, Command> = {
  * The background holder `work join` starts. It keeps the presence socket open until the agent's process ends, `work
  * leave` stops it, or the join is replaced.
  */
-export async function hold(ctx: Ctx, workspace: string, session: string, agentPid: number) {
+export async function hold(ctx: Ctx, workspace: string, session: string, agentPid: number, mode: "joined" | "own" = "joined") {
   const own = ctx.who.ownSession ?? process.env.WORK_SESSION!
+  const mine = () => {
+    const state = Config.state(own)
+    if (mode === "own") return state.present?.pid === process.pid && state.present.workspace === workspace
+    return state.joined?.session === session && state.joined.pid === process.pid
+  }
   const socket = WorkSocket.presence(ctx.options, workspace, session, { message: () => {} })
   await new Promise<void>((resolve) => {
     const stop = () => resolve()
     process.once("SIGTERM", stop)
     process.once("SIGINT", stop)
     const check = setInterval(() => {
-      const joined = Config.state(own).joined
-      if ((agentPid > 1 && !alive(agentPid)) || !joined || joined.session !== session || joined.pid !== process.pid) {
+      if ((agentPid > 1 && !alive(agentPid)) || !mine()) {
         clearInterval(check)
         resolve()
       }

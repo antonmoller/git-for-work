@@ -58,6 +58,8 @@ export const useWorkspace = (slug: string, dir = process.cwd()) => {
 /** Small per-session state: what this agent joined, its watch positions, when it last checked its inbox. */
 export interface SessionState {
   joined?: { session: string; workspace: string; pid: number | null; at: number }
+  /** The background process that keeps the agent present in its own session. */
+  present?: { workspace: string; pid: number | null; at: number }
   watch?: Record<string, number>
   inboxCheckedAt?: number
 }

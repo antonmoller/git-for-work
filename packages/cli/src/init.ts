@@ -221,6 +221,7 @@ async function claudeHook(event: string, input: ClaudeInput) {
   }
   if (event === "session-end") {
     Presence.leave(session)
+    Presence.absent(session)
   }
   let ctx: Awaited<ReturnType<typeof Context.make>>
   try {
@@ -233,6 +234,7 @@ async function claudeHook(event: string, input: ClaudeInput) {
     const workspace = await ctx.workspace().catch(() => null)
     if (!workspace) return
     const params = { workspace }
+    if (event !== "session-end") Presence.attend(ctx, workspace)
     if (event === "tool" && input.tool_name && !isWorkCall(input.tool_name, input.tool_input ?? {})) {
       const summary = summarize(input.tool_name, input.tool_input ?? {}, input.cwd ?? process.cwd())
       await ctx.call((c) => c.session.step({ params, payload: { kind: "tool", text: summary ? `${input.tool_name}: ${summary}` : input.tool_name!, data: { tool: input.tool_name } } }))
