@@ -287,7 +287,7 @@ const MessageHandlers = HttpApiBuilder.group(Api, "message", (handlers) =>
         if (!w.caller.session || !w.caller.actor.agent) {
           if (p.kind !== "comment") return yield* new Errors.Invalid({ message: "Only agents ask, tell and hand off" })
           const caller = { actor: w.caller.actor, session: null, member: null, trajectory: null, intent: null, now: Date.now() }
-          const entry = yield* call(() => w.object.comment(caller, { key, ref: p.ref ?? null, text: p.text, version: p.version ?? null }))
+          const entry = yield* call(() => w.object.comment(caller, { key, ref: p.ref ?? null, text: p.text, version: p.version ?? null, to: key ? null : to }))
           return entry
         }
         const s = yield* sessionFor(ctx.params.workspace)
@@ -336,6 +336,7 @@ const LogHandlers = HttpApiBuilder.group(Api, "log", (handlers) =>
             by: ctx.query.by,
             session: ctx.query.session,
             trajectory: ctx.query.trajectory,
+            to: ctx.query.to,
             limit: ctx.query.limit,
           }),
         )

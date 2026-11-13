@@ -15,6 +15,8 @@ export const LogGroup = HttpApiGroup.make("log")
         by: Schema.optional(Schema.String),
         session: Schema.optional(Schema.String),
         trajectory: Schema.optional(Schema.String),
+        /** Entries addressed to a session, an agent or a person. */
+        to: Schema.optional(Schema.String),
         limit: Schema.optional(Schema.NumberFromString),
       },
       success: Schema.Array(Entry.Info),

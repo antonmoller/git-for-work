@@ -137,6 +137,14 @@ describe("inbox and tasks through sessions", () => {
     expect((await w.workspace(Workspace.inbox(me, true))).items).toEqual([])
   })
 
+  test("a comment on a trajectory reaches its session, and only that one", async () => {
+    const w = world()
+    const browser = { actor: person("anna"), session: null, member: null, trajectory: null, intent: null, now: tick() }
+    await w.workspace(Workspace.comment(browser, { key: null, ref: null, text: "Use the EU list", version: null, to: "s1" }))
+    expect((await w.workspace(Workspace.inbox({ session: "s1", address: "karl/codex", handle: "karl" }, true))).items.map((e) => e.text)).toEqual(["Use the EU list"])
+    expect((await w.workspace(Workspace.inbox({ session: "s2", address: "karl/claude", handle: "karl" }, true))).items).toEqual([])
+  })
+
   test("one taker per task", async () => {
     const w = world()
     await w.session("s1", Session.record(w.who("s1", "karl", "codex"), { kind: "task.add", text: "Check freight" }))

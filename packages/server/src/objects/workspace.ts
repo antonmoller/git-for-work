@@ -100,7 +100,7 @@ export class WorkspaceObject extends DurableObject<Env> {
   requestRevert(caller: Caller, key: string, version: number, to: string) {
     return this.change(Workspace.requestRevert(caller, key, version, to))
   }
-  comment(caller: Caller, input: { key: string | null; ref: number | null; text: string; version: number | null }) {
+  comment(caller: Caller, input: { key: string | null; ref: number | null; text: string; version: number | null; to: string | null }) {
     return this.change(Workspace.comment(caller, input))
   }
   takeTask(caller: Caller, task: string) {

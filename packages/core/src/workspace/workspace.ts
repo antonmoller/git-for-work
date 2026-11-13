@@ -475,8 +475,9 @@ export const requestRevert = (caller: Caller, key: string, version: number, to: 
   )
 
 /** A comment from a person in the browser. Agents comment through their session's log. */
-export const comment = (caller: Caller, input: { key: string | null; ref: number | null; text: string; version: number | null }) =>
-  transaction(append(caller, { kind: "comment", keys: input.key ? [input.key as Key.Value] : [], ref: input.ref, text: input.text, version: input.version }))
+/** A comment from a person in the browser: on a URL, or to a session or agent (on a trajectory, say). */
+export const comment = (caller: Caller, input: { key: string | null; ref: number | null; text: string; version: number | null; to?: string | null }) =>
+  transaction(append(caller, { kind: "comment", keys: input.key ? [input.key as Key.Value] : [], ref: input.ref, text: input.text, version: input.version, to: input.to ?? null }))
 
 const findTask = (idOrTitle: string) =>
   Effect.gen(function* () {
@@ -617,6 +618,7 @@ export interface LogFilter {
   readonly by?: string
   readonly session?: string
   readonly trajectory?: string
+  readonly to?: string
   readonly kinds?: ReadonlyArray<string>
   readonly limit?: number
   readonly order?: "asc" | "desc"
@@ -631,6 +633,7 @@ export const log = (filter: LogFilter = {}) =>
       filter.beforeSeq !== undefined ? lt(t.entry.seq, filter.beforeSeq) : undefined,
       filter.session ? eq(t.entry.session, filter.session) : undefined,
       filter.trajectory ? eq(t.entry.trajectory, filter.trajectory) : undefined,
+      filter.to ? eq(t.entry.to, filter.to) : undefined,
       filter.kinds ? inArray(t.entry.kind, [...filter.kinds]) : undefined,
       filter.by ? sql`(${t.entry.by} = ${filter.by} OR ${t.entry.member} = ${filter.by})` : undefined,
       filter.sinceVersion !== undefined ? gt(t.entry.version, filter.sinceVersion) : undefined,
@@ -681,7 +684,7 @@ export const isFor = (e: Pick<Entry.Info, "kind" | "session" | "to" | "keys">, m
   if (e.session === me.session) return false
   const toMe = e.to !== null && (e.to === me.address || e.to === me.handle || e.to === me.session || me.keys.some((k) => KeyOverlap.overlaps(k, e.to!)))
   if (e.kind === "ask" || e.kind === "tell" || e.kind === "handoff" || e.kind === "revert.request") return toMe
-  if (e.kind === "comment") return e.keys.some((k) => me.keys.some((m) => KeyOverlap.overlaps(m, k)))
+  if (e.kind === "comment") return toMe || e.keys.some((k) => me.keys.some((m) => KeyOverlap.overlaps(m, k)))
   return false
 }
 
