@@ -137,32 +137,32 @@ pre.content-view { margin: 12px 16px; padding: 12px 14px; border-radius: 10px; b
 
 /* lanes */
 .ln { display: block; width: 100%; height: auto; font-family: var(--sans); }
-.ln-band { fill: transparent; }
-.ln-band.alt { fill: color-mix(in oklab, var(--fg) 2.5%, transparent); }
-.ln-grid { stroke: color-mix(in oklab, var(--fg) 7%, transparent); stroke-width: 1; }
-.ln-ax { fill: var(--mfg); font-size: 9.5px; font-variant-numeric: tabular-nums; }
+.ln-grid { stroke: color-mix(in oklab, var(--fg) 5%, transparent); stroke-width: 0.75; }
+.ln-track { stroke: color-mix(in oklab, var(--fg) 6%, transparent); stroke-width: 0.75; }
+.ln-ax { fill: var(--mfg); font-size: 8px; font-variant-numeric: tabular-nums; }
 .ln-name { cursor: pointer; }
 .ln-name:hover .ln-who { text-decoration: underline; }
-.ln-dot { stroke-width: 1.5; }
-.ln-who { fill: var(--fg); font-size: 11.5px; font-weight: 550; }
-.ln-sub { fill: var(--mfg); font-size: 9.5px; }
-.ln-t { cursor: pointer; }
-.ln-bar { fill: color-mix(in oklab, var(--c) 10%, var(--card)); stroke: color-mix(in oklab, var(--c) 55%, transparent); stroke-width: 1; }
-.ln-bar.on { fill: color-mix(in oklab, var(--c) 28%, var(--card)); stroke: var(--c); }
-.ln-t:hover .ln-bar { fill: color-mix(in oklab, var(--c) 38%, var(--card)); }
-.ln-lab { fill: var(--fg); font-size: 10px; font-weight: 500; pointer-events: none; }
-.ln-cap { fill: var(--mfg); font-size: 9.5px; pointer-events: none; paint-order: stroke; stroke: var(--well); stroke-width: 3px; stroke-linejoin: round; }
-.ln-w { stroke: var(--card); stroke-width: 1; }
-.ln-n { fill: var(--mfg); font-size: 8.5px; font-weight: 600; }
-.ln-halo { paint-order: stroke; stroke: var(--well); stroke-width: 3px; stroke-linejoin: round; }
+.ln-dot { stroke-width: 1.2; }
+.ln-who { fill: var(--fg); font-size: 9px; font-weight: 550; }
+.ln-sub { fill: var(--mfg); font-size: 7.5px; }
+.ln-bar { fill: color-mix(in oklab, var(--c) 35%, transparent); cursor: pointer; transition: fill 0.12s; }
+.ln-bar.on { fill: var(--c); }
+.ln-bar:hover { fill: color-mix(in oklab, var(--c) 75%, var(--fg)); }
+.ln-w { fill: var(--card); pointer-events: all; }
 .ln-claim { fill: var(--amber-line); }
-.ln-arrow { fill: none; stroke: color-mix(in oklab, var(--fg) 40%, transparent); stroke-width: 1.1; }
-.ln-rel { stroke: var(--amber-line); stroke-width: 1.4; }
-.ln-head { fill: color-mix(in oklab, var(--fg) 40%, transparent); }
-.ln-head-rel { fill: var(--amber-line); }
-.ln-now { stroke: var(--primary); stroke-width: 1; stroke-dasharray: 2 3; }
-.ln-nowl { fill: var(--primary); font-size: 9.5px; font-weight: 600; }
-.ln-legend text { fill: var(--mfg); font-size: 9.5px; }
+.ln-link { cursor: default; }
+.ln-hit { fill: none; stroke: transparent; stroke-width: 8; }
+.ln-arrow { fill: none; stroke: color-mix(in oklab, var(--fg) 38%, transparent); stroke-linecap: round; transition: stroke 0.12s; }
+.ln-arrow.rel { stroke: var(--amber-line); }
+.ln-link:hover .ln-arrow { stroke: var(--fg); }
+.ln-link:hover .ln-arrow.rel { stroke: color-mix(in oklab, var(--amber-line) 70%, var(--fg)); }
+.ln-head { fill: none; stroke: color-mix(in oklab, var(--fg) 38%, transparent); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
+.ln-head.rel { stroke: var(--amber-line); }
+.ln-tail { fill: color-mix(in oklab, var(--fg) 38%, transparent); }
+.ln-tail.rel { fill: var(--amber-line); }
+.ln-now { stroke: var(--primary); stroke-width: 0.75; stroke-dasharray: 2 2.5; }
+.ln-nowl { fill: var(--primary); font-size: 7.5px; font-weight: 600; }
+.ln-legend text { fill: var(--mfg); font-size: 7.5px; }
 
 /* trajectory steps */
 .steps { padding: 14px 20px 20px; display: flex; flex-direction: column; }

@@ -4,14 +4,13 @@ import { agentName, colorFor, first, label, navigate, paths } from "../lib.ts"
 type Today = Views.Today
 
 const W = 728
-const LEFT = 120
-const RIGHT = 20
-const LANE = 58
-const TOP = 20
-const BAR = 18
-const AXIS = 22
-const LEGEND = 22
-const CHAR = 5.6
+const LEFT = 92
+const RIGHT = 16
+const LANE = 34
+const TOP = 16
+const BAR = 6
+const AXIS = 18
+const LEGEND = 18
 
 /** Picks a tick step that gives about six to ten ticks across the range. */
 const step = (span: number) => {
@@ -19,14 +18,8 @@ const step = (span: number) => {
   return steps.find((s) => span / s <= 10) ?? 6 * 3600e3
 }
 
-/** Cuts text to a pixel width, or null when not even a few characters fit. */
-const fit = (text: string, width: number) => {
-  const chars = Math.floor(width / CHAR)
-  return chars >= text.length ? text : chars >= 6 ? `${text.slice(0, chars - 1)}…` : null
-}
-
-/** Puts events closer than `gap` pixels in one group, so they draw as one mark with a count. */
-function cluster<A>(items: ReadonlyArray<A>, at: (a: A) => number, key: (a: A) => string, gap = 9) {
+/** Puts events closer than `gap` pixels in one group, so they draw as one mark. */
+function cluster<A>(items: ReadonlyArray<A>, at: (a: A) => number, key: (a: A) => string, gap = 8) {
   const groups: { x: number; items: A[]; key: string }[] = []
   for (const item of [...items].sort((a, b) => at(a) - at(b))) {
     const last = groups.findLast((g) => g.key === key(item))
@@ -37,9 +30,9 @@ function cluster<A>(items: ReadonlyArray<A>, at: (a: A) => number, key: (a: A) =
 }
 
 /**
- * One lane per agent session. A bar is a trajectory (filled while it runs), the dots under it are writes, and an
- * amber line a claim still held. Arrows between lanes are messages (grey) and claims handed to a waiting agent (amber);
- * marks close together merge and show a count.
+ * One lane per agent session. A span is a trajectory (bright while it runs), beads on it are writes, the amber line
+ * under it a claim still held. Curves between lanes are messages (grey) and claims handed to a waiting agent (amber).
+ * Hover any mark for what it was.
  */
 export function Lanes({ today, workspace, now }: { today: Today; workspace: string; now: number }) {
   const sessions = [...new Set([...today.trajectories].sort((a, b) => a.startedAt - b.startedAt).map((t) => t.session as string))]
@@ -50,7 +43,8 @@ export function Lanes({ today, workspace, now }: { today: Today; workspace: stri
     const presence = today.presence.find((p) => p.session === session)
     const guests = (presence?.members ?? []).filter((m) => !m.owner)
     const live = (presence?.members ?? []).some((m) => m.owner) || trajectories.some((t) => t.status === "running")
-    return { session, i, owner, forName: trajectories[0]!.forName, trajectories, guests, live, color: colorFor(i), y: TOP + i * LANE }
+    const y = TOP + i * LANE
+    return { session, i, owner, forName: trajectories[0]!.forName, trajectories, guests, live, color: colorFor(i), y, cy: y + LANE / 2 }
   })
   const laneOf = new Map(lanes.map((l) => [l.session, l]))
   const byAddress = new Map(lanes.map((l) => [`${l.owner.handle}/${l.owner.agent}`, l]))
@@ -70,7 +64,8 @@ export function Lanes({ today, workspace, now }: { today: Today; workspace: stri
 
   const writes = today.entries.filter((e) => e.kind === "write" && e.session && laneOf.has(e.session))
   const releases = new Map(today.entries.filter((e) => e.kind === "release" || e.kind === "expire").map((e) => [e.seq, e]))
-  type Link = { seq: number; at: number; from: (typeof lanes)[number]; to: (typeof lanes)[number]; kind: "msg" | "rel"; text: string }
+  type Lane = (typeof lanes)[number]
+  type Link = { seq: number; at: number; from: Lane; to: Lane; kind: "msg" | "rel"; text: string }
   const links: Link[] = []
   for (const e of today.entries) {
     if (!e.session || !laneOf.has(e.session)) continue
@@ -83,165 +78,129 @@ export function Lanes({ today, workspace, now }: { today: Today; workspace: stri
       const release = releases.get(e.seq - 1)
       const from = release?.session ? laneOf.get(release.session) : undefined
       const to = laneOf.get(e.session)!
-      if (from && from !== to) links.push({ seq: e.seq, at: e.at, from, to, kind: "rel", text: `Handed ${e.title ?? e.keys[0] ?? "a claim"} to ${agentName(e.actor)}` })
+      if (from && from !== to) links.push({ seq: e.seq, at: e.at, from, to, kind: "rel", text: `${agentName(from.owner)} handed ${e.title ?? e.keys[0] ?? "a claim"} to ${agentName(e.actor)}` })
     }
   }
+  const state = (t: Lane["trajectories"][number]) => (t.status === "running" ? "running" : t.status === "failed" ? "gave up" : "done")
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="ln" role="img" aria-label="Agent sessions as lanes through the day">
       <defs>
-        <marker id="la" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-          <path d="M0 0 L10 5 L0 10 z" className="ln-head" />
+        <marker id="la" viewBox="0 0 8 8" refX="6.5" refY="4" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto">
+          <path d="M1 1 L6.5 4 L1 7" className="ln-head" />
         </marker>
-        <marker id="lr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-          <path d="M0 0 L10 5 L0 10 z" className="ln-head-rel" />
+        <marker id="lr" viewBox="0 0 8 8" refX="6.5" refY="4" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto">
+          <path d="M1 1 L6.5 4 L1 7" className="ln-head rel" />
         </marker>
       </defs>
 
-      {/* Lanes and the time grid */}
-      {lanes.map((l) => (
-        <rect key={l.session} x={0} y={l.y} width={W} height={LANE} className={l.i % 2 ? "ln-band alt" : "ln-band"} />
-      ))}
       {ticks.map((t) => (
         <g key={t}>
           <line x1={x(t)} y1={TOP} x2={x(t)} y2={bottom} className="ln-grid" />
-          <text x={x(t)} y={bottom + 15} className="ln-ax" textAnchor="middle">
+          <text x={x(t)} y={bottom + 12} className="ln-ax" textAnchor="middle">
             {fmt(t)}
           </text>
         </g>
       ))}
-
-      {/* Who */}
       {lanes.map((l) => (
-        <g key={l.session} className="ln-name" onClick={() => navigate(paths.session(workspace, l.session))}>
-          <title>{`${label(l.owner)}: open the session`}</title>
-          <circle cx={14} cy={l.y + 22} r={4} style={{ fill: l.live ? l.color : "transparent", stroke: l.color }} className="ln-dot" />
-          <text x={26} y={l.y + 26} className="ln-who">
-            {agentName(l.owner)}
-          </text>
-          <text x={26} y={l.y + 40} className="ln-sub">
-            for {first(l.forName)}
-            {l.guests.length > 0 ? ` · +${l.guests.length} joined` : ""}
-          </text>
+        <g key={l.session}>
+          <line x1={LEFT - 6} y1={l.cy} x2={W - RIGHT} y2={l.cy} className="ln-track" />
+          <g className="ln-name" onClick={() => navigate(paths.session(workspace, l.session))}>
+            <title>{`${label(l.owner)}${l.guests.length ? `, with ${l.guests.map((g) => g.label).join(", ")}` : ""}: open the session`}</title>
+            <circle cx={8} cy={l.cy} r={3} style={{ fill: l.live ? l.color : "transparent", stroke: l.color }} className="ln-dot" />
+            <text x={16} y={l.cy - 1} className="ln-who">
+              {agentName(l.owner)}
+            </text>
+            <text x={16} y={l.cy + 8} className="ln-sub">
+              for {first(l.forName)}
+              {l.guests.length > 0 ? ` · +${l.guests.length}` : ""}
+            </text>
+          </g>
         </g>
       ))}
 
-      {/* Trajectories: ones that nearly touch draw as one bar; the label sits inside when it fits, else under it */}
-      {lanes.flatMap((l) => {
-        const groups: (typeof l.trajectories)[number][][] = []
-        for (const t of l.trajectories) {
-          const last = groups.at(-1)
-          const end = last ? Math.max(...last.map((g) => x(g.endedAt ?? now))) : -Infinity
-          if (last && x(t.startedAt) - end < 10) last.push(t)
-          else groups.push([t])
-        }
-        let free = 0
-        return groups.map((g, i) => {
-          const latest = g.at(-1)!
-          const x1 = x(g[0]!.startedAt)
-          const x2 = Math.max(x1 + 8, ...g.map((t) => x(t.endedAt ?? now)))
-          const next = groups[i + 1]
-          const text = g.length > 1 ? `${latest.intent} (+${g.length - 1})` : latest.intent
-          const capStart = Math.max(x1, free)
-          const room = (next ? x(next[0]!.startedAt) : W - RIGHT) - capStart - 6
-          // Inside the bar whenever a few characters fit; under it only for bars too short to hold any.
-          const inside = fit(text, x2 - x1 - 14)
-          const under = inside ? null : fit(text, room)
-          if (under) free = capStart + under.length * CHAR + 10
-          const running = g.some((t) => t.status === "running")
-          const state = (t: (typeof g)[number]) => (t.status === "running" ? "running" : t.status === "failed" ? "gave up" : "done")
+      {/* Trajectories: thin spans, no text; hover tells */}
+      {lanes.flatMap((l) =>
+        l.trajectories.map((t) => {
+          const x1 = x(t.startedAt)
+          const x2 = Math.max(x1 + BAR, x(t.endedAt ?? now))
           return (
-            <g key={latest.id} className="ln-t" onClick={() => navigate(paths.trajectory(workspace, latest.session, latest.id))}>
-              <title>{g.map((t) => `${t.intent} · ${state(t)} · ${t.steps} steps, ${t.tools} tool calls`).join("\n")}</title>
-              <rect x={x1} y={l.y + 10} width={x2 - x1} height={BAR} rx={5} className={running ? "ln-bar on" : "ln-bar"} style={{ ["--c" as string]: l.color }} />
-              {inside && (
-                <text x={x1 + 7} y={l.y + 23} className="ln-lab">
-                  {inside}
-                </text>
-              )}
-              {under && (
-                <text x={capStart} y={l.y + 50} className="ln-cap">
-                  {under}
-                </text>
-              )}
-            </g>
+            <rect
+              key={t.id}
+              x={x1}
+              y={l.cy - BAR / 2}
+              width={x2 - x1}
+              height={BAR}
+              rx={BAR / 2}
+              className={t.status === "running" ? "ln-bar on" : "ln-bar"}
+              style={{ ["--c" as string]: l.color }}
+              onClick={() => navigate(paths.trajectory(workspace, t.session, t.id))}
+            >
+              <title>{`${t.intent}\n${state(t)} · ${t.steps} steps, ${t.tools} tool calls`}</title>
+            </rect>
           )
-        })
-      })}
+        }),
+      )}
 
-      {/* Claims held now */}
       {today.claims.map((c) => {
         const l = laneOf.get(c.session)
         if (!l) return null
         return (
-          <rect key={c.key} x={x(c.since)} y={l.y + 31} width={Math.max(3, x(now) - x(c.since))} height={2.5} rx={1.25} className="ln-claim">
+          <rect key={c.key} x={x(c.since)} y={l.cy + BAR / 2 + 2} width={Math.max(3, x(now) - x(c.since))} height={1.5} rx={0.75} className="ln-claim">
             <title>{`${label(c.holder)} holds ${c.title ?? c.key}`}</title>
           </rect>
         )
       })}
 
-      {/* Writes, grouped when close */}
-      {cluster(writes, (e) => x(e.at), (e) => e.session!).map((g) => {
+      {cluster(writes, (e) => x(e.at), (e) => e.session!, 5).map((g) => {
         const l = laneOf.get(g.key)!
         const names = [...new Set(g.items.map((e) => e.title ?? e.keys[0]))]
         return (
-          <g key={g.items[0]!.seq}>
+          <circle key={g.items[0]!.seq} cx={g.x} cy={l.cy} r={g.items.length > 1 ? 2 : 1.4} className="ln-w">
             <title>{g.items.length === 1 ? `Wrote v${g.items[0]!.version} of ${names[0]}` : `${g.items.length} writes: ${names.join(", ")}`}</title>
-            <circle cx={g.x} cy={l.y + 38} r={g.items.length > 1 ? 3.2 : 2.4} className="ln-w" style={{ fill: l.color }} />
-            {g.items.length > 1 && (
-              <text x={g.x + 5} y={l.y + 41} className="ln-n">
-                {g.items.length}
-              </text>
-            )}
-          </g>
+          </circle>
         )
       })}
 
-      {/* Messages and hand-overs between two lanes: close ones merge into one arrow, headed both ways when they went both ways */}
-      {cluster(links, (k) => x(k.at), (k) => `${k.kind}:${[k.from.session, k.to.session].sort().join("|")}`, 16).map((g) => {
+      {/* Messages: a soft curve from the sender's span to the receiver's; close ones merge, thicker the more they carry */}
+      {cluster(links, (k) => x(k.at), (k) => `${k.kind}:${k.from.session}>${k.to.session}`, 10).map((g) => {
         const k = g.items[0]!
-        const [upper, lower] = k.from.y < k.to.y ? [k.from, k.to] : [k.to, k.from]
-        const downs = g.items.some((i) => i.to === lower)
-        const ups = g.items.some((i) => i.to === upper)
-        const y1 = upper.y + 30
-        const y2 = lower.y + 8
         const rel = k.kind === "rel"
-        const head = rel ? "url(#lr)" : "url(#la)"
-        // A hand-over usually follows a message at the same moment; set it beside the message, not on it.
-        const ax = rel ? g.x + 5 : g.x
+        const dir = k.to.cy > k.from.cy ? 1 : -1
+        const ax = g.x + (rel ? 3 : 0)
+        const y1 = k.from.cy + dir * (BAR / 2 + 2)
+        const y2 = k.to.cy - dir * (BAR / 2 + 3)
+        // A shallow bow that leans forward in time, like the message travelling.
+        const d = `M${ax} ${y1} Q${ax + 7} ${(y1 + y2) / 2}, ${ax + 3} ${y2}`
+        const weight = Math.min(1 + (g.items.length - 1) * 0.35, 2.2)
         return (
-          <g key={k.seq}>
+          <g key={k.seq} className="ln-link">
             <title>{g.items.map((i) => i.text).join("\n")}</title>
-            <path d={`M${ax} ${y1} L${ax} ${y2}`} className={rel ? "ln-arrow ln-rel" : "ln-arrow"} markerEnd={downs ? head : undefined} markerStart={ups ? head : undefined} />
-            {g.items.length > 1 && (
-              <text x={ax + 4} y={(y1 + y2) / 2 + (rel ? 12 : 3)} className="ln-n ln-halo">
-                {g.items.length}
-              </text>
-            )}
+            <path d={d} className="ln-hit" />
+            <circle cx={ax} cy={y1} r={1.3} className={rel ? "ln-tail rel" : "ln-tail"} />
+            <path d={d} className={rel ? "ln-arrow rel" : "ln-arrow"} style={{ strokeWidth: weight }} markerEnd={rel ? "url(#lr)" : "url(#la)"} />
           </g>
         )
       })}
 
-      {/* Now */}
-      <line x1={x(now)} y1={TOP - 4} x2={x(now)} y2={bottom} className="ln-now" />
-      <text x={x(now)} y={TOP - 7} textAnchor="middle" className="ln-nowl">
+      <line x1={x(now)} y1={TOP - 2} x2={x(now)} y2={bottom} className="ln-now" />
+      <text x={x(now)} y={TOP - 5} textAnchor="middle" className="ln-nowl">
         now
       </text>
 
-      {/* Legend */}
-      <g transform={`translate(${LEFT} ${bottom + AXIS + 12})`} className="ln-legend">
-        <rect x={0} y={-7} width={18} height={9} rx={3} className="ln-bar on" style={{ ["--c" as string]: "var(--mfg)" }} />
-        <text x={24} y={1}>running</text>
-        <rect x={74} y={-7} width={18} height={9} rx={3} className="ln-bar" style={{ ["--c" as string]: "var(--mfg)" }} />
-        <text x={98} y={1}>done</text>
-        <circle cx={140} cy={-2.5} r={2.6} style={{ fill: "var(--mfg)" }} />
-        <text x={148} y={1}>write</text>
-        <rect x={186} y={-4} width={16} height={2.5} rx={1.25} className="ln-claim" />
-        <text x={208} y={1}>claim held</text>
-        <path d="M268 -2.5 L284 -2.5" className="ln-arrow" markerEnd="url(#la)" />
-        <text x={290} y={1}>message</text>
-        <path d="M344 -2.5 L360 -2.5" className="ln-arrow ln-rel" markerEnd="url(#lr)" />
-        <text x={366} y={1}>claim handed over</text>
+      <g transform={`translate(${LEFT} ${bottom + AXIS + 9})`} className="ln-legend">
+        <rect x={0} y={-5} width={16} height={BAR} rx={BAR / 2} className="ln-bar on" style={{ ["--c" as string]: "var(--mfg)" }} />
+        <text x={21} y={0}>running</text>
+        <rect x={62} y={-5} width={16} height={BAR} rx={BAR / 2} className="ln-bar" style={{ ["--c" as string]: "var(--mfg)" }} />
+        <text x={83} y={0}>done</text>
+        <circle cx={114} cy={-2} r={1.8} style={{ fill: "var(--mfg)" }} />
+        <text x={120} y={0}>write</text>
+        <rect x={150} y={-3} width={14} height={1.5} className="ln-claim" />
+        <text x={169} y={0}>claim held</text>
+        <path d="M218 -2 L232 -2" className="ln-arrow" markerEnd="url(#la)" />
+        <text x={237} y={0}>message</text>
+        <path d="M280 -2 L294 -2" className="ln-arrow rel" markerEnd="url(#lr)" />
+        <text x={299} y={0}>claim handed over</text>
       </g>
     </svg>
   )
