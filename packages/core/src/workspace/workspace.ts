@@ -254,11 +254,15 @@ export const release = (caller: Caller, keys?: ReadonlyArray<string>) =>
     }),
   )
 
-/** Abandons a waiter, for example when the CLI gives up. */
+/**
+ * Abandons a waiter, for example when the CLI gives up. Returns where it ended: a waiter granted just before the
+ * cancel arrived stays granted, and the caller holds the keys until it releases them.
+ */
 export const cancelWait = (session: string, waiter: number) =>
   Effect.gen(function* () {
     const database = yield* Database.Service
     yield* database.db.update(t.waiter).set({ status: "cancelled" }).where(and(eq(t.waiter.id, waiter), eq(t.waiter.session, session), eq(t.waiter.status, "waiting")))
+    return yield* waiterStatus(waiter)
   })
 
 export const waiterStatus = (waiter: number) =>

@@ -208,7 +208,7 @@ const ClaimHandlers = HttpApiBuilder.group(Api, "claim", (handlers) =>
     .handle("cancelWait", (ctx) =>
       Effect.gen(function* () {
         const s = yield* sessionFor(ctx.params.workspace)
-        yield* call(() => s.object.cancelWait(s.scope.session, ctx.params.waiter))
+        return yield* call(() => s.object.cancelWait(s.scope.session, ctx.params.waiter))
       }),
     )
     .handle("who", (ctx) =>

@@ -32,6 +32,8 @@ export const ClaimGroup = HttpApiGroup.make("claim")
   .add(
     HttpApiEndpoint.post("cancelWait", ws("/claims/waiters/:waiter/cancel"), {
       params: { ...params, waiter: Schema.NumberFromString },
+      /** Granted when the keys were handed over before the cancel: the caller holds them and must release them. */
+      success: Schema.Struct({ status: Schema.Literals(["waiting", "granted", "expired", "cancelled"]), seq: Schema.NullOr(Schema.Int), deadline: Schema.Int }),
       error: [...common],
     }),
   )
