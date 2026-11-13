@@ -1,0 +1,4 @@
+{ "name": "@work/api", "private": true, "type": "module",
+  "scripts": { "dev": "bunx wrangler dev --port 8787 --local", "deploy": "bun run stage.ts deploy" },
+  "dependencies": { "@work/server": "workspace:*" },
+  "devDependencies": { "@types/bun": "catalog:", "typescript": "catalog:", "wrangler": "catalog:", "@cloudflare/workers-types": "catalog:" } }

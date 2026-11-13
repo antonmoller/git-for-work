@@ -1,0 +1,9 @@
+{
+  "name": "@work/core",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts", "./*": "./src/*.ts" },
+  "scripts": { "test": "bun test", "typecheck": "tsc -p tsconfig.json" },
+  "dependencies": { "@work/schema": "workspace:*", "effect": "catalog:", "drizzle-orm": "catalog:", "jose": "catalog:" },
+  "devDependencies": { "@types/bun": "catalog:", "typescript": "catalog:" , "@effect/sql-sqlite-bun": "catalog:", "drizzle-kit": "catalog:", "fast-check": "catalog:" }
+}

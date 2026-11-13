@@ -1,0 +1,4 @@
+{ "name": "@work/app", "private": true, "type": "module",
+  "scripts": { "dev": "vite", "build": "vite build", "typecheck": "tsc -p tsconfig.json" },
+  "dependencies": { "@work/schema": "workspace:*", "@work/client": "workspace:*", "effect": "catalog:", "react": "catalog:", "react-dom": "catalog:" },
+  "devDependencies": { "@types/react": "catalog:", "@types/react-dom": "catalog:", "vite": "catalog:", "@vitejs/plugin-react": "catalog:", "typescript": "catalog:", "@types/bun": "catalog:" } }

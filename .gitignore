@@ -1,0 +1,8 @@
+node_modules
+dist
+.cache
+.wrangler
+.dev.vars*
+*.log
+.DS_Store
+packages/cli/bin

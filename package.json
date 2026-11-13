@@ -1,0 +1,38 @@
+{
+  "name": "git-for-work",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.3",
+  "workspaces": {
+    "packages": ["packages/*", "services/*", "specs"],
+    "catalog": {
+      "effect": "4.1.0",
+      "@effect/sql-sqlite-bun": "4.1.0",
+      "drizzle-orm": "1.0.0-rc.5-169397b",
+      "drizzle-kit": "1.0.0-rc.5-ab785fc",
+      "fast-check": "4.9.0",
+      "jose": "6.2.17",
+      "@types/bun": "1.4.3",
+      "@cloudflare/workers-types": "4.20251008.0",
+      "typescript": "5.9.3",
+      "wrangler": "4.162.0",
+      "react": "19.2.0",
+      "react-dom": "19.2.0",
+      "@types/react": "19.2.2",
+      "@types/react-dom": "19.2.2",
+      "vite": "7.3.7",
+      "@vitejs/plugin-react": "5.1.0"
+    }
+  },
+  "scripts": {
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun run --filter '@work/*' test",
+    "dev": "bun run --cwd services/api dev",
+    "e2e": "bun run --cwd specs test"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "prettier": { "semi": false, "printWidth": 120 }
+}
