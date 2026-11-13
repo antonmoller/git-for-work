@@ -230,7 +230,8 @@ export class SessionObject extends DurableObject<Env> {
       member: member.address,
       now: Date.now(),
     }
-    await runtime.runPromiseExit(Session.record(who, { kind, text: member.label, trajectory: null }))
+    // Agents joining and leaving is part of the session's story; people watching in the browser only show as present.
+    if (member.kind === "agent") await runtime.runPromiseExit(Session.record(who, { kind, text: member.label, trajectory: null }))
     await this.workspace(scope).setPresence(scope.session, owner ?? who.actor, members)
     // Joins and leaves go to the workspace now, so Today and watchers see them without waiting for the alarm.
     const flushed = await runtime.runPromiseExit(Session.flush)

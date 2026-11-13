@@ -101,7 +101,7 @@ async function auth(request: Request, url: URL) {
       const token = Auth.devToken({
         sub: `user_${handle}`,
         email: `${handle}@example.com`,
-        name: handle[0]!.toUpperCase() + handle.slice(1),
+        name: url.searchParams.get("name") ?? handle[0]!.toUpperCase() + handle.slice(1),
         org: url.searchParams.get("org") ?? "org_dev",
         role: url.searchParams.get("role") ?? "admin",
       })

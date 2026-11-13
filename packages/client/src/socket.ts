@@ -23,7 +23,7 @@ const open = async (options: Options, url: string) => {
   const headers: Record<string, string> = {}
   if (token) headers.authorization = `Bearer ${token}`
   if (options.agent) headers[Caller.headers.agent] = options.agent
-  return typeof Bun !== "undefined" ? new WebSocket(url, { headers } as never) : new WebSocket(url)
+  return "Bun" in globalThis ? new WebSocket(url, { headers } as never) : new WebSocket(url)
 }
 
 export interface Handle {
