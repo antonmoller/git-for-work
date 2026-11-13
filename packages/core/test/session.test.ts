@@ -156,4 +156,15 @@ describe("inbox and tasks through sessions", () => {
     expect((await take("s2", "karl", "claude"))._tag).toBe("Success")
     expect((await take("s3", "anna", "claude"))._tag).toBe("Failure")
   })
+
+  test("a task is done when named by id or by title", async () => {
+    const w = world()
+    const who = w.who("s1", "karl", "codex")
+    for (const text of ["Check freight", "Call Anna", "1"]) await w.session("s1", Session.record(who, { kind: "task.add", text }))
+    await w.session("s1", Session.record(who, { kind: "task.done", text: "2" }))
+    await w.session("s1", Session.record(who, { kind: "task.done", text: "Check freight" }))
+    await w.session("s1", Session.flush)
+    const status = Object.fromEntries((await w.workspace(Workspace.tasks())).map((t) => [t.title, t.status]))
+    expect(status).toEqual({ "Check freight": "done", "Call Anna": "done", "1": "open" })
+  })
 })

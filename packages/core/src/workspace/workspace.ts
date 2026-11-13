@@ -600,8 +600,11 @@ const project = (e: Entry.Event) =>
         .where(eq(t.trajectory.id, e.trajectory))
     if ((e.kind === "task.add" || e.kind === "handoff") && e.text)
       yield* db.insert(t.task).values({ title: e.text, status: "open", createdBy: e.actor, createdAt: e.at, from: e.trajectory, to: e.kind === "handoff" ? e.to : null })
-    if (e.kind === "task.done" && e.text) {
-      const row = (yield* db.select().from(t.task).where(and(eq(t.task.title, e.text), inArray(t.task.status, ["open", "taken"]))).orderBy(desc(t.task.id)))[0]
+    if (e.kind === "task.done" && (e.task || e.text)) {
+      // A task is named by id or by title, as `task take` names it.
+      const id = e.task ?? (/^\d+$/.test(e.text!) ? Number(e.text) : null)
+      const named = id !== null ? eq(t.task.id, id) : eq(t.task.title, e.text!)
+      const row = (yield* db.select().from(t.task).where(and(named, inArray(t.task.status, ["open", "taken"]))).orderBy(desc(t.task.id)))[0]
       if (row) yield* db.update(t.task).set({ status: "done", doneAt: e.at, taker: row.taker ?? e.actor, takenAt: row.takenAt ?? e.at }).where(eq(t.task.id, row.id))
     }
   })
