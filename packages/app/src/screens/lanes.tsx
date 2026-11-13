@@ -31,7 +31,7 @@ function cluster<A>(items: ReadonlyArray<A>, at: (a: A) => number, key: (a: A) =
 
 /**
  * One lane per agent session. A span is a trajectory (bright while it runs), beads on it are writes, the amber line
- * under it a claim still held. Curves between lanes are messages (grey) and claims handed to a waiting agent (amber).
+ * under it a claim still held. Straight arrows between lanes are messages (grey) and claims handed to a waiting agent (amber).
  * Hover any mark for what it was.
  */
 export function Lanes({ today, workspace, now }: { today: Today; workspace: string; now: number }) {
@@ -86,11 +86,11 @@ export function Lanes({ today, workspace, now }: { today: Today; workspace: stri
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="ln" role="img" aria-label="Agent sessions as lanes through the day">
       <defs>
-        <marker id="la" viewBox="0 0 8 8" refX="6.5" refY="4" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto">
-          <path d="M1 1 L6.5 4 L1 7" className="ln-head" />
+        <marker id="la" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" markerUnits="userSpaceOnUse" orient="auto">
+          <path d="M0 0 L6 3 L0 6 z" className="ln-head" />
         </marker>
-        <marker id="lr" viewBox="0 0 8 8" refX="6.5" refY="4" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto">
-          <path d="M1 1 L6.5 4 L1 7" className="ln-head rel" />
+        <marker id="lr" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" markerUnits="userSpaceOnUse" orient="auto">
+          <path d="M0 0 L6 3 L0 6 z" className="ln-head rel" />
         </marker>
       </defs>
 
@@ -162,22 +162,20 @@ export function Lanes({ today, workspace, now }: { today: Today; workspace: stri
         )
       })}
 
-      {/* Messages: a soft curve from the sender's span to the receiver's; close ones merge, thicker the more they carry */}
+      {/* Messages: a straight arrow from the sender's span to the receiver's; close ones merge, thicker the more they carry */}
       {cluster(links, (k) => x(k.at), (k) => `${k.kind}:${k.from.session}>${k.to.session}`, 10).map((g) => {
         const k = g.items[0]!
         const rel = k.kind === "rel"
         const dir = k.to.cy > k.from.cy ? 1 : -1
         const ax = g.x + (rel ? 3 : 0)
         const y1 = k.from.cy + dir * (BAR / 2 + 2)
-        const y2 = k.to.cy - dir * (BAR / 2 + 3)
-        // A shallow bow that leans forward in time, like the message travelling.
-        const d = `M${ax} ${y1} Q${ax + 7} ${(y1 + y2) / 2}, ${ax + 3} ${y2}`
-        const weight = Math.min(1 + (g.items.length - 1) * 0.35, 2.2)
+        const y2 = k.to.cy - dir * (BAR / 2 + 2)
+        const d = `M${ax} ${y1} L${ax} ${y2}`
+        const weight = g.items.length > 1 ? 1.5 : 1
         return (
           <g key={k.seq} className="ln-link">
             <title>{g.items.map((i) => i.text).join("\n")}</title>
             <path d={d} className="ln-hit" />
-            <circle cx={ax} cy={y1} r={1.3} className={rel ? "ln-tail rel" : "ln-tail"} />
             <path d={d} className={rel ? "ln-arrow rel" : "ln-arrow"} style={{ strokeWidth: weight }} markerEnd={rel ? "url(#lr)" : "url(#la)"} />
           </g>
         )
