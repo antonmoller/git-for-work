@@ -22,15 +22,27 @@ export const Kind = Schema.Literals([
   "tell",
   "trajectory.start",
   "trajectory.end",
+  "read",
+  "note",
+  "tool",
+  "join",
+  "leave",
+  "refused",
 ])
 export type Kind = typeof Kind.Type
 
+/** The aggregate for events no session owns: comments from the browser, expiries, grants to waiters. */
+export const WORKSPACE = "workspace"
+
 /**
- * One thing that happened. Appended, ordered, never edited. `hash` covers every other field and the previous
- * entry's hash, so the log is a chain.
+ * One thing that happened, as both objects store it. Events belong to an aggregate (an agent session, or the
+ * workspace) and are numbered contiguously within it by `aseq`. A session's events carry the same aggregate and aseq
+ * in the session object and in the workspace object, which is how a retried flush is recognised.
  */
-export const Info = Schema.Struct({
-  seq: Seq,
+export const Event = Schema.Struct({
+  id: Schema.String,
+  aggregate: Schema.String,
+  aseq: Seq,
   at: Millis,
   kind: Kind,
   actor: Actor,
@@ -48,10 +60,14 @@ export const Info = Schema.Struct({
   text: Schema.NullOr(Schema.String),
   /** An address (`karl/claude`), a person handle, or a key. */
   to: Schema.NullOr(Schema.String),
-  /** The entry this one answers or comments on. */
+  /** The entry this one answers or comments on, by workspace seq. */
   ref: Schema.NullOr(Seq),
   task: Schema.NullOr(Schema.Int),
-  prev: Schema.String,
-  hash: Schema.String,
-}).annotate({ identifier: "Entry" })
+  /** Extra detail: a tool call's name, a refusal's reason, who a trajectory is for. */
+  data: Schema.NullOr(Schema.Unknown),
+}).annotate({ identifier: "Entry.Event" })
+export interface Event extends Schema.Schema.Type<typeof Event> {}
+
+/** An event in the workspace log, with its position in arrival order across all aggregates. */
+export const Info = Schema.Struct({ ...Event.fields, seq: Seq }).annotate({ identifier: "Entry" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}

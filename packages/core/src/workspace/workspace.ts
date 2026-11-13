@@ -2,24 +2,21 @@ export * as Workspace from "./workspace.ts"
 
 import { and, asc, desc, eq, gt, inArray, lt, lte, sql } from "drizzle-orm"
 import { Effect } from "effect"
-import type { Actor } from "@work/schema/actor"
+import { Actor } from "@work/schema/actor"
 import type { Claim } from "@work/schema/claim"
-import type { Entry } from "@work/schema/entry"
+import { Entry } from "@work/schema/entry"
 import { Errors } from "@work/schema/errors"
 import type { Key } from "@work/schema/key"
 import type { Session } from "@work/schema/session"
 import type { Task } from "@work/schema/task"
 import type { Write } from "@work/schema/write"
 import { ContentFields } from "../content/fields.ts"
-import { ContentHash } from "../content/hash.ts"
 import { Database } from "../database/database.ts"
 import * as t from "../database/workspace.sql.ts"
 import { KeyOverlap } from "../key/overlap.ts"
 
 /** A claim is freed when its session has been quiet this long. */
 export const CLAIM_TTL = 15 * 60_000
-/** Drained entries stay in the hot tail this long before they are trimmed. */
-export const HOT_RETENTION = 7 * 24 * 60 * 60_000
 
 /** Who is calling, as the Worker established it, and from which session and trajectory. */
 export interface Caller {
@@ -32,31 +29,7 @@ export interface Caller {
   readonly now: number
 }
 
-type Row = typeof t.entry.$inferSelect
 type ClaimRow = typeof t.claim.$inferSelect
-
-const toEntry = (r: Row): Entry.Info => ({
-  seq: r.seq,
-  at: r.at,
-  kind: r.kind as Entry.Kind,
-  actor: r.actor as Actor.Info,
-  member: r.member,
-  session: r.session as Entry.Info["session"],
-  trajectory: r.trajectory as Entry.Info["trajectory"],
-  keys: r.keys as Key.Value[],
-  title: r.title,
-  version: r.version,
-  base: r.base,
-  content: r.content,
-  fields: r.fields as string[],
-  revertOf: r.revertOf,
-  text: r.text,
-  to: r.to,
-  ref: r.ref,
-  task: r.task,
-  prev: r.prev,
-  hash: r.hash,
-})
 
 const toClaim = (r: ClaimRow): Claim.Info => ({
   key: r.key as Key.Value,
@@ -83,26 +56,66 @@ const toTask = (r: typeof t.task.$inferSelect): Task.Info => ({
   doneAt: r.doneAt,
 })
 
-type Draft = Partial<Omit<Entry.Info, "seq" | "at" | "actor" | "prev" | "hash" | "kind">> & {
-  readonly kind: Entry.Kind
-}
+/** A new event id, ascending by time. */
+export const eventId = (now: number) => `evt_${now.toString(36).padStart(9, "0")}${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`
 
-/** Appends one entry to the chain. Must run inside the caller's transaction. */
-const append = (caller: Caller, draft: Draft) =>
+type Draft = Partial<Omit<Entry.Event, "id" | "aggregate" | "aseq" | "at" | "actor" | "kind">> & { readonly kind: Entry.Kind }
+
+const toInfo = (r: typeof t.entry.$inferSelect): Entry.Info => ({ ...(r.body as Entry.Event), seq: r.seq })
+
+/** Stores one event and advances its aggregate's sequence. Must run inside the caller's transaction. */
+const store = (event: Entry.Event) =>
   Effect.gen(function* () {
     const database = yield* Database.Service
     const db = database.db
-    const last = yield* db.select({ seq: t.entry.seq, hash: t.entry.hash }).from(t.entry).orderBy(desc(t.entry.seq)).limit(1)
-    const drained = yield* db.select().from(t.drain).where(eq(t.drain.id, 1))
-    const head = last[0] ?? (drained[0] ? { seq: drained[0].seq, hash: drained[0].hash } : { seq: 0, hash: ContentHash.GENESIS })
-    const body = {
-      seq: head.seq + 1,
+    const inserted = yield* db
+      .insert(t.entry)
+      .values({
+        id: event.id,
+        aggregate: event.aggregate,
+        aseq: event.aseq,
+        at: event.at,
+        kind: event.kind,
+        by: Actor.address(event.actor),
+        member: event.member,
+        session: event.session,
+        trajectory: event.trajectory,
+        keys: event.keys,
+        to: event.to,
+        version: event.version,
+        body: event,
+      })
+      .returning({ seq: t.entry.seq })
+    yield* db
+      .insert(t.sequence)
+      .values({ aggregate: event.aggregate, aseq: event.aseq })
+      .onConflictDoUpdate({ target: t.sequence.aggregate, set: { aseq: event.aseq } })
+    return { ...event, seq: inserted[0].seq } satisfies Entry.Info
+  })
+
+const latest = (aggregate: string) =>
+  Effect.gen(function* () {
+    const database = yield* Database.Service
+    return (yield* database.db.select().from(t.sequence).where(eq(t.sequence.aggregate, aggregate)))[0]?.aseq ?? 0
+  })
+
+/**
+ * Appends the caller's event as the next of its aggregate: the caller's session, or the workspace for a person in
+ * the browser. Must run inside the caller's transaction.
+ */
+const append = (caller: Caller, draft: Draft) =>
+  Effect.gen(function* () {
+    const aggregate = caller.session ?? Entry.WORKSPACE
+    return yield* store({
+      id: eventId(caller.now),
+      aggregate,
+      aseq: (yield* latest(aggregate)) + 1,
       at: caller.now,
       kind: draft.kind,
       actor: caller.actor,
       member: draft.member ?? caller.member,
-      session: (draft.session ?? caller.session) as Entry.Info["session"],
-      trajectory: (draft.trajectory ?? caller.trajectory) as Entry.Info["trajectory"],
+      session: (draft.session ?? caller.session) as Entry.Event["session"],
+      trajectory: (draft.trajectory ?? caller.trajectory) as Entry.Event["trajectory"],
       keys: draft.keys ?? [],
       title: draft.title ?? null,
       version: draft.version ?? null,
@@ -114,12 +127,12 @@ const append = (caller: Caller, draft: Draft) =>
       to: draft.to ?? null,
       ref: draft.ref ?? null,
       task: draft.task ?? null,
-      prev: head.hash,
-    }
-    const entry: Entry.Info = { ...body, hash: ContentHash.chain(body) }
-    yield* db.insert(t.entry).values({ ...entry, drained: 0 })
-    return entry
+      data: draft.data ?? null,
+    })
   })
+
+/** Appends an event the workspace makes on no session's behalf: expiries and grants. */
+const appendForWorkspace = (caller: Caller, draft: Draft) => append({ ...caller, session: null }, { session: caller.session as Entry.Event["session"], ...draft })
 
 const transaction = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
@@ -220,7 +233,7 @@ const grant = (now: number) =>
       const titles = w.titles as Array<string | null>
       const holder = { actor: w.actor as Actor.Info, session: w.session, member: w.member, trajectory: w.trajectory, intent: w.intent, now }
       yield* insertClaims(holder, keys.map((key, i) => ({ key, title: titles[i] ?? null })))
-      const entry = yield* append(holder, { kind: "claim", keys: keys as Key.Value[], title: titles[0] ?? null, text: "after waiting" })
+      const entry = yield* appendForWorkspace(holder, { kind: "claim", keys: keys as Key.Value[], title: titles[0] ?? null, text: "after waiting" })
       yield* database.db.update(t.waiter).set({ status: "granted", seq: entry.seq }).where(eq(t.waiter.id, w.id))
       granted.push({ waiter: w.id, session: w.session, seq: entry.seq })
     }
@@ -273,7 +286,7 @@ export const expire = (now: number, system: Actor.Info) =>
       const stale = (yield* database.db.select().from(t.claim).where(lt(t.claim.lastActive, now - CLAIM_TTL))).map(toClaim)
       for (const c of stale) {
         yield* database.db.delete(t.claim).where(eq(t.claim.key, c.key))
-        yield* append(
+        yield* appendForWorkspace(
           { actor: c.holder, session: c.session, member: c.member, trajectory: c.trajectory, intent: c.intent, now },
           { kind: "expire", keys: [c.key], text: `quiet since ${new Date(c.lastActive).toISOString()}` },
         )
@@ -451,25 +464,9 @@ export const requestRevert = (caller: Caller, key: string, version: number, to: 
     }),
   )
 
+/** A comment from a person in the browser. Agents comment through their session's log. */
 export const comment = (caller: Caller, input: { key: string | null; ref: number | null; text: string; version: number | null }) =>
   transaction(append(caller, { kind: "comment", keys: input.key ? [input.key as Key.Value] : [], ref: input.ref, text: input.text, version: input.version }))
-
-/** `to` is an address (`karl/claude`), a person handle, or a key (whoever holds it). */
-export const message = (caller: Caller, kind: "ask" | "tell", input: { to: string; text: string; ref: number | null; key: string | null }) =>
-  transaction(append(caller, { kind, to: input.to, text: input.text, ref: input.ref, keys: input.key ? [input.key as Key.Value] : [] }))
-
-export const addTask = (caller: Caller, title: string, to: string | null = null) =>
-  transaction(
-    Effect.gen(function* () {
-      const database = yield* Database.Service
-      const row = yield* database.db
-        .insert(t.task)
-        .values({ title, status: "open", createdBy: caller.actor, createdAt: caller.now, from: caller.trajectory, to })
-        .returning()
-      const entry = yield* append(caller, { kind: to ? "handoff" : "task.add", task: row[0].id, text: title, to })
-      return { task: toTask(row[0]), entry }
-    }),
-  )
 
 const findTask = (idOrTitle: string) =>
   Effect.gen(function* () {
@@ -496,74 +493,11 @@ export const takeTask = (caller: Caller, idOrTitle: string) =>
     }),
   )
 
-export const doneTask = (caller: Caller, idOrTitle: string) =>
-  transaction(
-    Effect.gen(function* () {
-      const database = yield* Database.Service
-      const row = yield* findTask(idOrTitle)
-      const updated = yield* database.db
-        .update(t.task)
-        .set({ status: "done", doneAt: caller.now, taker: row.taker ?? caller.actor, takenAt: row.takenAt ?? caller.now })
-        .where(eq(t.task.id, row.id))
-        .returning()
-      const entry = yield* append(caller, { kind: "task.done", task: row.id, text: row.title })
-      return { task: toTask(updated[0]), entry }
-    }),
-  )
-
 export const tasks = (status?: ReadonlyArray<string>) =>
   Effect.gen(function* () {
     const database = yield* Database.Service
     const rows = status ? yield* database.db.select().from(t.task).where(inArray(t.task.status, [...status])) : yield* database.db.select().from(t.task)
     return rows.map(toTask)
-  })
-
-export interface TrajectoryInput {
-  readonly id: string
-  readonly intent: string
-  readonly forHandle: string
-  readonly forName: string
-}
-
-export const startTrajectory = (caller: Caller, input: TrajectoryInput) =>
-  transaction(
-    Effect.gen(function* () {
-      const database = yield* Database.Service
-      yield* database.db.insert(t.trajectory).values({
-        id: input.id,
-        session: caller.session ?? "",
-        intent: input.intent,
-        owner: caller.actor,
-        forHandle: input.forHandle,
-        forName: input.forName,
-        status: "running",
-        startedAt: caller.now,
-        steps: 1,
-        tools: 0,
-        writes: 0,
-      })
-      return yield* append({ ...caller, trajectory: input.id, intent: input.intent }, { kind: "trajectory.start", text: input.intent, to: input.forHandle })
-    }),
-  )
-
-/** Ends a trajectory and releases its session's claims. */
-export const endTrajectory = (caller: Caller, id: string, status: "done" | "failed", why: string | null) =>
-  Effect.gen(function* () {
-    const database = yield* Database.Service
-    yield* database.db.update(t.trajectory).set({ status, endedAt: caller.now }).where(eq(t.trajectory.id, id))
-    const released = yield* release(caller)
-    const entry = yield* transaction(append({ ...caller, trajectory: id }, { kind: "trajectory.end", text: why, fields: [status] }))
-    return { entry, released }
-  })
-
-/** Counts steps for Today's lanes. The session object reports them in batches. */
-export const countSteps = (trajectory: string, steps: number, tools: number) =>
-  Effect.gen(function* () {
-    const database = yield* Database.Service
-    yield* database.db
-      .update(t.trajectory)
-      .set({ steps: sql`${t.trajectory.steps} + ${steps}`, tools: sql`${t.trajectory.tools} + ${tools}` })
-      .where(eq(t.trajectory.id, trajectory))
   })
 
 export const setPresence = (session: string, owner: Actor.Info, members: ReadonlyArray<Session.Member>, now: number) =>
@@ -595,6 +529,75 @@ export const who = (key: string) =>
     } satisfies Claim.Who
   })
 
+/**
+ * Takes a session's events, flushed in aseq order, with opencode's replay rules: an event at or below its
+ * aggregate's latest aseq must be the one already stored (same id) and is skipped; otherwise it must be exactly the
+ * next aseq. Each new event is projected and stored in one transaction. Returns the session's latest aseq.
+ */
+export const replay = (session: string, events: ReadonlyArray<Entry.Event>, now: number) =>
+  transaction(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      for (const event of [...events].sort((a, b) => a.aseq - b.aseq)) {
+        if (event.aggregate !== session || event.session !== session)
+          return yield* new Errors.Invalid({ message: `Event ${event.id} is not from session ${session}` })
+        const head = yield* latest(session)
+        if (event.aseq <= head) {
+          const stored = (yield* database.db.select({ id: t.entry.id }).from(t.entry).where(and(eq(t.entry.aggregate, session), eq(t.entry.aseq, event.aseq))))[0]
+          if (stored?.id === event.id) continue
+          return yield* Effect.die(new Error(`Replay diverged for ${session} at ${event.aseq}`))
+        }
+        if (event.aseq !== head + 1) return yield* new Errors.Gap({ aggregate: session, expected: head + 1, got: event.aseq })
+        yield* project(event)
+        yield* store(event)
+      }
+      yield* touch(session, now)
+      return yield* latest(session)
+    }),
+  )
+
+/** The read tables a session's own events update. Coordinated events update theirs where they are decided. */
+const project = (e: Entry.Event) =>
+  Effect.gen(function* () {
+    const database = yield* Database.Service
+    const db = database.db
+    if (e.kind === "trajectory.start" && e.trajectory) {
+      const data = (e.data ?? {}) as { forHandle?: string; forName?: string }
+      yield* db
+        .insert(t.trajectory)
+        .values({
+          id: e.trajectory,
+          session: e.session ?? "",
+          intent: e.text ?? "",
+          owner: e.actor,
+          forHandle: data.forHandle ?? e.actor.handle,
+          forName: data.forName ?? e.actor.name,
+          status: "running",
+          startedAt: e.at,
+          steps: 1,
+          tools: 0,
+          writes: 0,
+        })
+        .onConflictDoNothing()
+    }
+    if (e.kind === "trajectory.end" && e.trajectory)
+      yield* db.update(t.trajectory).set({ status: e.title === "failed" ? "failed" : "done", endedAt: e.at }).where(eq(t.trajectory.id, e.trajectory))
+    if (e.trajectory && (e.kind === "note" || e.kind === "read" || e.kind === "tool"))
+      yield* db
+        .update(t.trajectory)
+        .set(e.kind === "tool" ? { tools: sql`${t.trajectory.tools} + 1` } : { steps: sql`${t.trajectory.steps} + 1` })
+        .where(eq(t.trajectory.id, e.trajectory))
+    if ((e.kind === "task.add" || e.kind === "handoff") && e.text)
+      yield* db.insert(t.task).values({ title: e.text, status: "open", createdBy: e.actor, createdAt: e.at, from: e.trajectory, to: e.kind === "handoff" ? e.to : null })
+    if (e.kind === "task.done" && e.text) {
+      const row = (yield* db.select().from(t.task).where(and(eq(t.task.title, e.text), inArray(t.task.status, ["open", "taken"]))).orderBy(desc(t.task.id)))[0]
+      if (row) yield* db.update(t.task).set({ status: "done", doneAt: e.at, taker: row.taker ?? e.actor, takenAt: row.takenAt ?? e.at }).where(eq(t.task.id, row.id))
+    }
+  })
+
+/** A session's latest aseq here, so a restarted session object knows where its flush stands. */
+export const sessionHead = (session: string) => latest(session)
+
 export interface LogFilter {
   readonly key?: string
   /** Only entries after this version of `key`. */
@@ -604,10 +607,12 @@ export interface LogFilter {
   readonly by?: string
   readonly session?: string
   readonly trajectory?: string
+  readonly kinds?: ReadonlyArray<string>
   readonly limit?: number
+  readonly order?: "asc" | "desc"
 }
 
-/** The log, newest first, from the hot tail. Older history comes from the long-term log (docs/log.md). */
+/** The workspace log. Newest first unless `order: "asc"`. */
 export const log = (filter: LogFilter = {}) =>
   Effect.gen(function* () {
     const database = yield* Database.Service
@@ -616,14 +621,19 @@ export const log = (filter: LogFilter = {}) =>
       filter.beforeSeq !== undefined ? lt(t.entry.seq, filter.beforeSeq) : undefined,
       filter.session ? eq(t.entry.session, filter.session) : undefined,
       filter.trajectory ? eq(t.entry.trajectory, filter.trajectory) : undefined,
+      filter.kinds ? inArray(t.entry.kind, [...filter.kinds]) : undefined,
+      filter.by ? sql`(${t.entry.by} = ${filter.by} OR ${t.entry.member} = ${filter.by})` : undefined,
+      filter.sinceVersion !== undefined ? gt(t.entry.version, filter.sinceVersion) : undefined,
     ].filter((c) => c !== undefined)
-    const rows = yield* database.db.select().from(t.entry).where(conds.length ? and(...conds) : undefined).orderBy(desc(t.entry.seq))
-    const entries = rows
-      .map(toEntry)
-      .filter((e) => !filter.key || e.keys.some((k) => KeyOverlap.covers(filter.key!, k)) || e.to === filter.key)
-      .filter((e) => !filter.sinceVersion || (e.version ?? 0) > filter.sinceVersion)
-      .filter((e) => !filter.by || `${e.actor.handle}${e.actor.agent ? `/${e.actor.agent}` : ""}` === filter.by || e.member === filter.by)
-    return entries.slice(0, filter.limit ?? 200)
+    const rows = yield* database.db
+      .select()
+      .from(t.entry)
+      .where(conds.length ? and(...conds) : undefined)
+      .orderBy(filter.order === "asc" ? asc(t.entry.seq) : desc(t.entry.seq))
+    return rows
+      .filter((r) => !filter.key || (r.keys as string[]).some((k) => KeyOverlap.covers(filter.key!, k)) || r.to === filter.key)
+      .slice(0, filter.limit ?? 200)
+      .map(toInfo)
   })
 
 export const entry = (seq: number) =>
@@ -631,7 +641,7 @@ export const entry = (seq: number) =>
     const database = yield* Database.Service
     const rows = yield* database.db.select().from(t.entry).where(eq(t.entry.seq, seq))
     if (!rows[0]) return yield* new Errors.NotFound({ what: "entry", id: String(seq) })
-    return toEntry(rows[0])
+    return toInfo(rows[0])
   })
 
 /** Every version of a URL, newest first, with its blame and comments. */
@@ -644,9 +654,8 @@ export const history = (key: string) =>
       const v = versions.find((x) => x.version === f.version)!
       return { field: f.field, version: f.version, at: v.at, actor: v.actor, trajectory: v.trajectory, value: f.value } satisfies Write.BlameLine
     })
-    const comments = (yield* log({ key })).filter((e) => e.kind === "comment" || e.kind === "revert.request")
-    const current = yield* who(key)
-    return { who: current, versions, blame, comments }
+    const comments = yield* log({ key, kinds: ["comment", "revert.request"] })
+    return { who: yield* who(key), versions, blame, comments }
   })
 
 export const version = (key: string, v: number) =>
@@ -658,7 +667,7 @@ export const version = (key: string, v: number) =>
   })
 
 /** Whether an entry is for this session: its agent, its person, or a URL it holds or wrote. Its own entries are not. */
-export const isFor = (e: Entry.Info, me: { session: string; address: string; handle: string; keys: ReadonlyArray<string> }) => {
+export const isFor = (e: Pick<Entry.Info, "kind" | "session" | "to" | "keys">, me: { session: string; address: string; handle: string; keys: ReadonlyArray<string> }) => {
   if (e.session === me.session) return false
   const toMe = e.to !== null && (e.to === me.address || e.to === me.handle || e.to === me.session || me.keys.some((k) => KeyOverlap.overlaps(k, e.to!)))
   if (e.kind === "ask" || e.kind === "tell" || e.kind === "handoff" || e.kind === "revert.request") return toMe
@@ -675,26 +684,36 @@ export const inbox = (me: { session: string; address: string; handle: string }, 
     const held = (yield* allClaims).filter((c) => c.session === me.session).map((c) => c.key)
     const written = (yield* db.select({ key: t.version.key }).from(t.version).where(eq(t.version.session, me.session))).map((r) => r.key)
     const keys = [...new Set([...held, ...written])]
-    const rows = (yield* db.select().from(t.entry).where(gt(t.entry.seq, cursor)).orderBy(asc(t.entry.seq))).map(toEntry)
-    const items = rows.filter((e) => isFor(e, { ...me, keys }))
-    const head = rows.at(-1)?.seq ?? cursor
+    const rows = yield* db
+      .select()
+      .from(t.entry)
+      .where(and(gt(t.entry.seq, cursor), inArray(t.entry.kind, ["ask", "tell", "handoff", "revert.request", "comment"])))
+      .orderBy(asc(t.entry.seq))
+    const items = rows.map(toInfo).filter((e) => isFor(e, { ...me, keys }))
+    const head = (yield* db.select({ seq: t.entry.seq }).from(t.entry).orderBy(desc(t.entry.seq)).limit(1))[0]?.seq ?? cursor
     if (advance && head > cursor)
       yield* db.insert(t.cursor).values({ session: me.session, seq: head }).onConflictDoUpdate({ target: t.cursor.session, set: { seq: head } })
     return { items, cursor: head }
   })
 
-/** Everything the Today screen needs, from the hot state. */
+/** Everything the Today screen needs. */
 export const today = (since: number) =>
   Effect.gen(function* () {
     const database = yield* Database.Service
     const db = database.db
     const trajectories = (yield* db.select().from(t.trajectory)).filter((r) => r.status === "running" || (r.endedAt ?? r.startedAt) >= since)
     const presence = yield* db.select().from(t.presence)
-    const entries = (yield* db.select().from(t.entry).where(gt(t.entry.at, since)).orderBy(desc(t.entry.seq))).map(toEntry)
+    const writes = yield* db.select({ trajectory: t.entry.trajectory }).from(t.entry).where(and(eq(t.entry.kind, "write"), gt(t.entry.at, since)))
+    const entries = (yield* db
+      .select()
+      .from(t.entry)
+      .where(and(gt(t.entry.at, since), sql`${t.entry.kind} NOT IN ('note', 'read', 'tool')`))
+      .orderBy(desc(t.entry.seq))
+      .limit(500)).map(toInfo)
     return {
       trajectories: trajectories.map((r) => ({
-        id: r.id,
-        session: r.session,
+        id: r.id as Session.Trajectory["id"],
+        session: r.session as Session.Trajectory["session"],
         intent: r.intent,
         forHandle: r.forHandle,
         forName: r.forName,
@@ -704,7 +723,7 @@ export const today = (since: number) =>
         endedAt: r.endedAt,
         steps: r.steps,
         tools: r.tools,
-        writes: entries.filter((e) => e.trajectory === r.id && e.kind === "write").length,
+        writes: writes.filter((w) => w.trajectory === r.id).length,
       })),
       presence: presence.map((p) => ({ session: p.session, owner: p.owner as Actor.Info, members: p.members as Session.Member[], lastActive: p.lastActive })),
       claims: yield* allClaims,
@@ -713,28 +732,10 @@ export const today = (since: number) =>
     }
   })
 
-/** Entries committed but not yet in the long-term log, oldest first. */
-export const pending = (limit = 500) =>
+/** A session's events as the workspace holds them, after `aseq`, in order. */
+export const sessionEvents = (session: string, after: number) =>
   Effect.gen(function* () {
     const database = yield* Database.Service
-    return (yield* database.db.select().from(t.entry).where(eq(t.entry.drained, 0)).orderBy(asc(t.entry.seq)).limit(limit)).map(toEntry)
-  })
-
-/** Marks entries up to `seq` durable in the long-term log. Re-marking is harmless. */
-export const drained = (seq: number, hash: string, now: number) =>
-  Effect.gen(function* () {
-    const database = yield* Database.Service
-    yield* database.db.update(t.entry).set({ drained: 1 }).where(lte(t.entry.seq, seq))
-    yield* database.db
-      .insert(t.drain)
-      .values({ id: 1, seq, hash, inFlight: 0, updatedAt: now })
-      .onConflictDoUpdate({ target: t.drain.id, set: { seq, hash, inFlight: 0, updatedAt: now } })
-  })
-
-/** Drops drained entries older than the hot window, always keeping the newest entry for the chain's head. */
-export const trim = (now: number, retention = HOT_RETENTION) =>
-  Effect.gen(function* () {
-    const database = yield* Database.Service
-    const head = (yield* database.db.select({ seq: t.entry.seq }).from(t.entry).orderBy(desc(t.entry.seq)).limit(1))[0]?.seq ?? 0
-    yield* database.db.delete(t.entry).where(and(eq(t.entry.drained, 1), lt(t.entry.at, now - retention), lt(t.entry.seq, head)))
+    const rows = yield* database.db.select().from(t.entry).where(and(eq(t.entry.aggregate, session), gt(t.entry.aseq, after))).orderBy(asc(t.entry.aseq))
+    return rows.map((r) => r.body as Entry.Event)
   })

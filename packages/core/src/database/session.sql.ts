@@ -18,18 +18,16 @@ export const trajectory = sqliteTable("trajectory", {
   endedAt: integer("ended_at"),
 })
 
-export const step = sqliteTable("step", {
-  seq: integer("seq").primaryKey(),
+/**
+ * The session's own log: its events numbered by `aseq`, the session being the aggregate. `meta.flushed` holds the
+ * highest aseq the workspace has confirmed; events above it are flushed by the object's alarm.
+ */
+export const event = sqliteTable("event", {
+  aseq: integer("aseq").primaryKey(),
+  id: text("id").notNull().unique(),
   at: integer("at").notNull(),
   kind: text("kind").notNull(),
   trajectory: text("trajectory"),
-  member: text("member").notNull(),
-  text: text("text"),
-  key: text("key"),
-  title: text("title"),
-  version: integer("version"),
-  entry: integer("entry"),
-  data: text("data", { mode: "json" }),
-  prev: text("prev").notNull(),
-  hash: text("hash").notNull(),
+  member: text("member"),
+  body: text("body", { mode: "json" }).notNull(),
 })

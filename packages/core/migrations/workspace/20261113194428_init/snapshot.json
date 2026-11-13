@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "81d4cb6a-f8ad-4c89-abd0-6a44ba75e10a",
+  "id": "58a019e9-be62-4f78-9355-6d42360ec0b8",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -28,6 +28,10 @@
     },
     {
       "name": "presence",
+      "entityType": "tables"
+    },
+    {
+      "name": "sequence",
       "entityType": "tables"
     },
     {
@@ -221,6 +225,36 @@
       "table": "entry"
     },
     {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "entry"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "aggregate",
+      "entityType": "columns",
+      "table": "entry"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "aseq",
+      "entityType": "columns",
+      "table": "entry"
+    },
+    {
       "type": "integer",
       "notNull": true,
       "autoincrement": false,
@@ -246,7 +280,7 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "actor",
+      "name": "by",
       "entityType": "columns",
       "table": "entry"
     },
@@ -296,7 +330,7 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "title",
+      "name": "to",
       "entityType": "columns",
       "table": "entry"
     },
@@ -311,112 +345,12 @@
       "table": "entry"
     },
     {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "base",
-      "entityType": "columns",
-      "table": "entry"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "content",
-      "entityType": "columns",
-      "table": "entry"
-    },
-    {
       "type": "text",
       "notNull": true,
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "fields",
-      "entityType": "columns",
-      "table": "entry"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "revert_of",
-      "entityType": "columns",
-      "table": "entry"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "text",
-      "entityType": "columns",
-      "table": "entry"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "to",
-      "entityType": "columns",
-      "table": "entry"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "ref",
-      "entityType": "columns",
-      "table": "entry"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "task",
-      "entityType": "columns",
-      "table": "entry"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "prev",
-      "entityType": "columns",
-      "table": "entry"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "hash",
-      "entityType": "columns",
-      "table": "entry"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": "0",
-      "generated": null,
-      "name": "drained",
+      "name": "body",
       "entityType": "columns",
       "table": "entry"
     },
@@ -499,6 +433,26 @@
       "name": "last_active",
       "entityType": "columns",
       "table": "presence"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "aggregate",
+      "entityType": "columns",
+      "table": "sequence"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "aseq",
+      "entityType": "columns",
+      "table": "sequence"
     },
     {
       "type": "integer",
@@ -1137,6 +1091,15 @@
     },
     {
       "columns": [
+        "aggregate"
+      ],
+      "nameExplicit": false,
+      "name": "sequence_pk",
+      "table": "sequence",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
         "id"
       ],
       "nameExplicit": false,
@@ -1188,7 +1151,25 @@
     {
       "columns": [
         {
-          "value": "drained",
+          "value": "aggregate",
+          "isExpression": false
+        },
+        {
+          "value": "aseq",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "entry_aggregate_aseq",
+      "entityType": "indexes",
+      "table": "entry"
+    },
+    {
+      "columns": [
+        {
+          "value": "session",
           "isExpression": false
         },
         {
@@ -1199,21 +1180,43 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "entry_drained",
+      "name": "entry_session",
       "entityType": "indexes",
       "table": "entry"
     },
     {
       "columns": [
         {
-          "value": "session",
+          "value": "trajectory",
+          "isExpression": false
+        },
+        {
+          "value": "seq",
           "isExpression": false
         }
       ],
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "entry_session",
+      "name": "entry_trajectory",
+      "entityType": "indexes",
+      "table": "entry"
+    },
+    {
+      "columns": [
+        {
+          "value": "kind",
+          "isExpression": false
+        },
+        {
+          "value": "seq",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "entry_kind",
       "entityType": "indexes",
       "table": "entry"
     },
@@ -1243,6 +1246,15 @@
       "origin": "manual",
       "name": "entry_at",
       "entityType": "indexes",
+      "table": "entry"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "entry_id_unique",
+      "entityType": "uniques",
       "table": "entry"
     }
   ],

@@ -11,7 +11,8 @@ No pull requests, review or approvals. Revert is a forward write an agent carrie
 - Drizzle tables use snake_case columns, one `*.sql.ts` per object kind (organization, workspace, session).
   After changing one: `KIND=<kind> bunx drizzle-kit generate --name <what>` in packages/core, then
   `bun run script/migrations.ts`. Never edit `migrations.gen.ts` by hand.
-- The workspace object is the only sequencer. Claims, writes, reverts, comments, tasks and messages go through it.
+- The workspace object is the only sequencer and the only place to list from. Sessions keep their own event log and
+  flush it there with opencode-style replay; see docs/log.md.
 - Write the law first, then its property test (packages/core/test). Core runs on Bun SQLite in tests and on
   Durable Object SQLite in the Worker; keep it unaware of Cloudflare.
 - Never put a secret in source, logs, fixtures or test output. Secrets are set with `bunx wrangler secret put`.

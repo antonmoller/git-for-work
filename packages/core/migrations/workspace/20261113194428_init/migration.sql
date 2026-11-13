@@ -25,26 +25,19 @@ CREATE TABLE `drain` (
 --> statement-breakpoint
 CREATE TABLE `entry` (
 	`seq` integer PRIMARY KEY,
+	`id` text NOT NULL UNIQUE,
+	`aggregate` text NOT NULL,
+	`aseq` integer NOT NULL,
 	`at` integer NOT NULL,
 	`kind` text NOT NULL,
-	`actor` text NOT NULL,
+	`by` text NOT NULL,
 	`member` text,
 	`session` text,
 	`trajectory` text,
 	`keys` text NOT NULL,
-	`title` text,
-	`version` integer,
-	`base` integer,
-	`content` text,
-	`fields` text NOT NULL,
-	`revert_of` integer,
-	`text` text,
 	`to` text,
-	`ref` integer,
-	`task` integer,
-	`prev` text NOT NULL,
-	`hash` text NOT NULL,
-	`drained` integer DEFAULT 0 NOT NULL
+	`version` integer,
+	`body` text NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `field` (
@@ -60,6 +53,11 @@ CREATE TABLE `presence` (
 	`owner` text NOT NULL,
 	`members` text NOT NULL,
 	`last_active` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE `sequence` (
+	`aggregate` text PRIMARY KEY,
+	`aseq` integer NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `task` (
@@ -136,7 +134,9 @@ CREATE TABLE `waiter` (
 );
 --> statement-breakpoint
 CREATE INDEX `claim_session` ON `claim` (`session`);--> statement-breakpoint
-CREATE INDEX `entry_drained` ON `entry` (`drained`,`seq`);--> statement-breakpoint
-CREATE INDEX `entry_session` ON `entry` (`session`);--> statement-breakpoint
+CREATE UNIQUE INDEX `entry_aggregate_aseq` ON `entry` (`aggregate`,`aseq`);--> statement-breakpoint
+CREATE INDEX `entry_session` ON `entry` (`session`,`seq`);--> statement-breakpoint
+CREATE INDEX `entry_trajectory` ON `entry` (`trajectory`,`seq`);--> statement-breakpoint
+CREATE INDEX `entry_kind` ON `entry` (`kind`,`seq`);--> statement-breakpoint
 CREATE INDEX `entry_to` ON `entry` (`to`);--> statement-breakpoint
 CREATE INDEX `entry_at` ON `entry` (`at`);

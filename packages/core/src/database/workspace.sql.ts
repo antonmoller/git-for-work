@@ -1,38 +1,49 @@
-import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core"
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
 
 // The workspace object's tables. The entry table is the acked commit point and the outbox: entries are
 // drained to the long-term log (docs/log.md) and trimmed past a hot-retention window.
 // The workspace object's tables. One object per workspace: it is the only sequencer.
 // JSON columns hold schema-validated values (actors, key lists); they are decoded at the edge of core.
 
+/**
+ * The workspace log: every event from every session, plus the workspace's own, in arrival order (`seq`).
+ * The same shape as opencode's event table: (aggregate, aseq) is unique and contiguous per aggregate, so a session's
+ * retried flush is a no-op. The columns besides `body` are there to filter on.
+ */
 export const entry = sqliteTable(
   "entry",
   {
     seq: integer("seq").primaryKey(),
+    id: text("id").notNull().unique(),
+    aggregate: text("aggregate").notNull(),
+    aseq: integer("aseq").notNull(),
     at: integer("at").notNull(),
     kind: text("kind").notNull(),
-    actor: text("actor", { mode: "json" }).notNull(),
+    /** The actor's address, `karl/codex` or `karl`. */
+    by: text("by").notNull(),
     member: text("member"),
     session: text("session"),
     trajectory: text("trajectory"),
     keys: text("keys", { mode: "json" }).notNull(),
-    title: text("title"),
-    version: integer("version"),
-    base: integer("base"),
-    content: text("content"),
-    fields: text("fields", { mode: "json" }).notNull(),
-    revertOf: integer("revert_of"),
-    text: text("text"),
     to: text("to"),
-    ref: integer("ref"),
-    task: integer("task"),
-    prev: text("prev").notNull(),
-    hash: text("hash").notNull(),
-    /** Set once the entry is durable in the workspace's long-term log (docs/log.md). Drained rows are trimmed later. */
-    drained: integer("drained").notNull().default(0),
+    version: integer("version"),
+    body: text("body", { mode: "json" }).notNull(),
   },
-  (t) => [index("entry_drained").on(t.drained, t.seq), index("entry_session").on(t.session), index("entry_to").on(t.to), index("entry_at").on(t.at)],
+  (t) => [
+    uniqueIndex("entry_aggregate_aseq").on(t.aggregate, t.aseq),
+    index("entry_session").on(t.session, t.seq),
+    index("entry_trajectory").on(t.trajectory, t.seq),
+    index("entry_kind").on(t.kind, t.seq),
+    index("entry_to").on(t.to),
+    index("entry_at").on(t.at),
+  ],
 )
+
+/** The latest aseq of each aggregate. */
+export const sequence = sqliteTable("sequence", {
+  aggregate: text("aggregate").primaryKey(),
+  aseq: integer("aseq").notNull(),
+})
 
 /** Every URL that was ever written or claimed: its current version and title. */
 export const url = sqliteTable("url", {

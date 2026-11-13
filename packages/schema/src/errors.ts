@@ -69,3 +69,10 @@ export class Forbidden extends Schema.TaggedError<Forbidden>()(
   { message: Schema.String },
   { httpApiStatus: 403 },
 ) {}
+
+/** A flushed event skipped ahead of its aggregate's sequence. Resend from `expected`. */
+export class Gap extends Schema.TaggedError<Gap>()(
+  "Gap",
+  { aggregate: Schema.String, expected: Schema.Int, got: Schema.Int },
+  { httpApiStatus: 409 },
+) {}

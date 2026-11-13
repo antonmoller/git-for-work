@@ -1,22 +1,16 @@
-CREATE TABLE `meta` (
-	`key` text PRIMARY KEY,
-	`value` text NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE `step` (
-	`seq` integer PRIMARY KEY,
+CREATE TABLE `event` (
+	`aseq` integer PRIMARY KEY,
+	`id` text NOT NULL UNIQUE,
 	`at` integer NOT NULL,
 	`kind` text NOT NULL,
 	`trajectory` text,
-	`member` text NOT NULL,
-	`text` text,
-	`key` text,
-	`title` text,
-	`version` integer,
-	`entry` integer,
-	`data` text,
-	`prev` text NOT NULL,
-	`hash` text NOT NULL
+	`member` text,
+	`body` text NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE `meta` (
+	`key` text PRIMARY KEY,
+	`value` text NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `trajectory` (
