@@ -49,7 +49,7 @@ describe("claims are all or none", () => {
         expect(later._tag).toBe("Waiting")
         const released = yield* Workspace.release(caller("karl", "codex", "s1"))
         expect(released.granted.map((g) => g.session)).toEqual(["s2"])
-        expect((yield* Workspace.who("erp.se/prices")).holders[0].session).toBe("s2")
+        expect<string>((yield* Workspace.who("erp.se/prices")).holders[0].session).toBe("s2")
       }),
     )
   })
