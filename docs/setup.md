@@ -33,14 +33,18 @@ Secrets are set by a person, never in source: `bunx wrangler secret put WORKOS_A
 
 ## WorkOS (per environment)
 
-The client ID goes in `services/api/wrangler.jsonc` under the stage's `vars`. In the WorkOS dashboard:
+The dev stage uses the Staging environment of "mimetic's Project" (client `client_01HKAAVJ8N2TTGAPKM9738E1SN`, the
+default application, shared with mimetic's staging console). The client ID goes in `services/api/wrangler.jsonc` under
+the stage's `vars`; the environment's API key is the `WORKOS_API_KEY` secret. In the WorkOS dashboard:
 
-1. **Redirects**: add `https://work-api-dev.anton-j-moller.workers.dev/auth/callback` as a redirect URI (the default),
-   and `https://work-api-dev.anton-j-moller.workers.dev/` as the sign-out redirect.
-2. **Authentication → CLI Auth**: on. `work login` uses the device flow.
-3. **Organizations**: create one and add each person as a member. A sign-in without an organization is refused; each
-   WorkOS organization is one Work organization.
-4. **Roles**: `admin` (creates workspaces), `member` (the default: works in them), `viewer` (reads and comments).
+1. **Applications → the application → Redirects → Redirect URIs**: add
+   `https://work-api-dev.anton-j-moller.workers.dev/auth/callback`. It need not be the default: the Worker names it on
+   every sign-in.
+2. **CLI Auth** needs no setting with hosted AuthKit; `work login` uses the device flow.
+3. **Organizations**: one per Work organization (dev: "Tangent", `org_01M7BCPRRHX8JT9TARR93DANEK`). Add each person
+   under the organization's **Users**. A sign-in without an organization is refused.
+4. **Roles** (Authorization): `admin` creates workspaces, `member` (the default) works in them, `viewer` reads and
+   comments. Set a person's role with the row's **Edit membership role**.
 5. **JWT template** (optional): `{"email": "{{user.email}}", "name": "{{user.first_name}} {{user.last_name}}"}`. Without
    it the Worker looks people up with `WORKOS_API_KEY`.
 

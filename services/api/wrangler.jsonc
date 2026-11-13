@@ -23,7 +23,7 @@
   },
   "observability": { "enabled": true },
   "env": {
-    // On workers.dev; PUBLIC_URL is empty, so the Worker uses the origin it is called on. Content blobs stay in the EU.
+    // WorkOS Staging. On workers.dev; PUBLIC_URL is empty, so the Worker uses the origin it is called on. Content blobs stay in the EU.
     "dev": {
       "name": "work-api-dev",
       "durable_objects": {
@@ -38,7 +38,7 @@
       "vars": {
         "STAGE": "dev",
         "PUBLIC_URL": "",
-        "WORKOS_CLIENT_ID": "client_01HKAAVJGACQCFB0H4RGX9H50C"
+        "WORKOS_CLIENT_ID": "client_01HKAAVJ8N2TTGAPKM9738E1SN"
       },
       // The web app. The Worker answers /api and /auth; every other path is the app.
       "assets": {
