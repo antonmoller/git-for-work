@@ -19,3 +19,16 @@ No pull requests, review or approvals. Revert is a forward write an agent carrie
 - Conventional commits (`feat(core): …`). Commit locally, never amend, never push without Anton's yes.
 - Run evidence (test logs, e2e transcripts) goes in the ignored `.cache/`.
 - `packages/core/src/database/drizzle` is copied from opencode (MIT); see its README before changing it.
+
+<!-- work:start -->
+## Work log
+
+This project logs agent work with the `work` CLI, so people and other agents see what was done, by whom and why, and nobody overwrites anyone.
+
+- Start each task with `work start "<what you are doing, for whom>"`; end it with `work done` or `work fail "<why>"`. Both release your claims.
+- Before you change something others may change too (a file, a doc, a sheet, a record), claim it: `work claim <url or path>`. If it is held, ask the holder with `work ask <url> "<question>"`, or wait with `work claim <url> --wait 10m`.
+- Say what you read with `work read <url>` and write with `work put <url> --from <file>` (a path in this checkout needs no --from). A refusal names who wrote since you read: read again, redo the change on top, then put.
+- Check `work inbox` when you start and between steps (with Claude Code's hooks, new items appear in your context by themselves). Answer with `work tell <who> "<text>"`; `work note "<text>"` records a decision in your own words.
+- A revert request names its command: run it, apply what it saved, then `work put <url> --revert vN --from <file>`.
+- `work help` lists everything. Exit 1 is a refusal to act on, 2 a mistake in the command, 3 means sign in with `work login`.
+<!-- work:end -->
