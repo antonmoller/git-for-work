@@ -38,7 +38,7 @@
       "vars": {
         "STAGE": "dev",
         "PUBLIC_URL": "",
-        "WORKOS_CLIENT_ID": "client_unset"
+        "WORKOS_CLIENT_ID": "client_01HKAAVJGACQCFB0H4RGX9H50C"
       },
       // The web app. The Worker answers /api and /auth; every other path is the app.
       "assets": {
