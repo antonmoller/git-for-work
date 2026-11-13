@@ -56,6 +56,12 @@ const setMeta = (key: string, value: unknown) =>
     yield* database.db.insert(t.meta).values({ key, value }).onConflictDoUpdate({ target: t.meta.key, set: { value } })
   })
 
+const clearMeta = (key: string) =>
+  Effect.gen(function* () {
+    const database = yield* Database.Service
+    yield* database.db.delete(t.meta).where(eq(t.meta.key, key))
+  })
+
 const latest = Effect.gen(function* () {
   const database = yield* Database.Service
   return (yield* database.db.select({ aseq: t.event.aseq }).from(t.event).orderBy(desc(t.event.aseq)).limit(1))[0]?.aseq ?? 0
@@ -121,7 +127,8 @@ export const end = (who: Who, status: "done" | "failed", why: string | null) =>
     const id = yield* current(who.member)
     if (!id) return yield* new Errors.Invalid({ message: "No trajectory is running; start one with `work start`" })
     const event = yield* record(who, { kind: "trajectory.end", trajectory: id as Entry.Event["trajectory"], title: status, text: why })
-    yield* setMeta(`current:${who.member}`, null)
+    // A JSON null is stored as SQL NULL, which the column refuses: no current trajectory is no row.
+    yield* clearMeta(`current:${who.member}`)
     return event
   })
 

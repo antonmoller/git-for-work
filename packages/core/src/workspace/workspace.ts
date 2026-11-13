@@ -293,13 +293,19 @@ export const expire = (now: number, system: Actor.Info) =>
       }
       yield* database.db.update(t.waiter).set({ status: "expired" }).where(and(eq(t.waiter.status, "waiting"), lte(t.waiter.deadline, now)))
       const granted = yield* grant(now)
-      const claims = yield* database.db.select({ lastActive: t.claim.lastActive }).from(t.claim)
-      const waits = yield* database.db.select({ deadline: t.waiter.deadline }).from(t.waiter).where(eq(t.waiter.status, "waiting"))
-      const next = Math.min(...claims.map((c) => c.lastActive + CLAIM_TTL), ...waits.map((w) => w.deadline), Infinity)
       void system
-      return { expired: stale.map((c) => c.key as string), granted, next: Number.isFinite(next) ? next : null }
+      return { expired: stale.map((c) => c.key as string), granted, next: yield* nextAlarm }
     }),
   )
+
+/** When a claim next goes quiet or a wait ends, for the object's alarm. Null when nothing is pending. */
+export const nextAlarm = Effect.gen(function* () {
+  const database = yield* Database.Service
+  const claims = yield* database.db.select({ lastActive: t.claim.lastActive }).from(t.claim)
+  const waits = yield* database.db.select({ deadline: t.waiter.deadline }).from(t.waiter).where(eq(t.waiter.status, "waiting"))
+  const next = Math.min(...claims.map((c) => c.lastActive + CLAIM_TTL), ...waits.map((w) => w.deadline), Infinity)
+  return Number.isFinite(next) ? next : null
+})
 
 export interface WriteInput {
   readonly key: string
@@ -441,14 +447,14 @@ export const revert = (caller: Caller, key: string, version: number, only?: Read
       const current = (yield* db.select().from(t.url).where(eq(t.url.key, key)))[0]
       yield* insertClaims(caller, [{ key, title: current?.title ?? null }])
       yield* append(caller, { kind: "revert.start", keys: [key as Key.Value], version: current?.version ?? version, revertOf: version, fields })
-      const previous = versions.find((v) => v.version === version - 1)
       return {
         key: key as Key.Value,
         revertOf: version,
         current: current?.version ?? version,
         fields,
         values: Object.fromEntries(fields.map((f) => [f, target.before[f] ?? null])),
-        baseContent: previous?.content ?? null,
+        /** The hash of the current content; the caller restores the fields onto it. */
+        content: current?.content ?? null,
       } satisfies Write.RevertPlan
     }),
   )

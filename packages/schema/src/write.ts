@@ -34,8 +34,8 @@ export const RevertPlan = Schema.Struct({
   fields: Schema.Array(Schema.String),
   /** Field values to put back; null means the field did not exist before. */
   values: Schema.Record(Schema.String, Schema.NullOr(Schema.String)),
-  /** The content before the reverted write, as Work holds it. */
-  baseContent: Schema.NullOr(Schema.String),
+  /** The content to put back: the current content with the reverted fields restored. */
+  content: Schema.NullOr(Schema.String),
 }).annotate({ identifier: "Write.RevertPlan" })
 export interface RevertPlan extends Schema.Schema.Type<typeof RevertPlan> {}
 

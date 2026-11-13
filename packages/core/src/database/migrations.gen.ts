@@ -2,9 +2,10 @@
 export const migrations = {
   "organization": [
     {
-      "id": "20261113192747_init",
+      "id": "20261113195159_init",
       "statements": [
         "CREATE TABLE `access` (\n\t`id` text PRIMARY KEY,\n\t`allowed` integer NOT NULL,\n\t`expires_at` integer NOT NULL\n);",
+        "CREATE TABLE `person` (\n\t`id` text PRIMARY KEY,\n\t`email` text NOT NULL,\n\t`name` text NOT NULL,\n\t`handle` text NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
         "CREATE TABLE `workspace` (\n\t`slug` text PRIMARY KEY,\n\t`name` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`created_by` text NOT NULL,\n\t`rules` text NOT NULL\n);"
       ]
     }

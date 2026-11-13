@@ -16,3 +16,12 @@ export const access = sqliteTable("access", {
   allowed: integer("allowed").notNull(),
   expiresAt: integer("expires_at").notNull(),
 })
+
+/** Names and emails of people, from WorkOS, so entries can say "Karl Svensson" without asking WorkOS each time. */
+export const person = sqliteTable("person", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull(),
+  name: text("name").notNull(),
+  handle: text("handle").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+})

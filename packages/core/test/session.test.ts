@@ -38,6 +38,18 @@ describe("session flush", () => {
     expect((await w.workspace(Workspace.today(0))).trajectories[0].steps).toBe(4)
   })
 
+  test("ending a trajectory clears the member's current one, and the next start takes over", async () => {
+    const w = world()
+    const who = w.who("s1", "karl", "codex")
+    await w.session("s1", Session.start(who, { id: "t_aaaa", intent: "One", forHandle: "karl", forName: "Karl" }))
+    await w.session("s1", Session.end(who, "done", null))
+    expect(await w.session("s1", Session.current("karl/codex"))).toBeNull()
+    await w.session("s1", Session.start(who, { id: "t_bbbb", intent: "Two", forHandle: "karl", forName: "Karl" }))
+    expect(await w.session("s1", Session.current("karl/codex"))).toBe("t_bbbb")
+    expect((await w.session("s1", Session.trajectories)).map((t): [string, string] => [t.id, t.status])).toEqual([["t_bbbb", "running"], ["t_aaaa", "done"]])
+    await sameLogs(w, "s1")
+  })
+
   test("a coordinated action flushes first, so the session's order holds in the workspace", async () => {
     const w = world()
     const who = w.who("s1", "karl", "codex")

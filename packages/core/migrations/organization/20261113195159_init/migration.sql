@@ -4,6 +4,14 @@ CREATE TABLE `access` (
 	`expires_at` integer NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE `person` (
+	`id` text PRIMARY KEY,
+	`email` text NOT NULL,
+	`name` text NOT NULL,
+	`handle` text NOT NULL,
+	`updated_at` integer NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE `workspace` (
 	`slug` text PRIMARY KEY,
 	`name` text NOT NULL,
