@@ -14,13 +14,45 @@ export class Failed extends Error {
   }
 }
 
+// The sign-in: WorkOS access tokens live minutes, so the cookie is renewed with the refresh cookie before it runs out
+// and whenever a call comes back Unauthorized. Refresh tokens are single-use, so one refresh runs at a time.
+
+const RENEW_EVERY = 4 * 60e3
+let refreshing: Promise<boolean> | null = null
+let renewedAt = Date.now()
+
+export const refresh = (): Promise<boolean> =>
+  (refreshing ??= fetch("/auth/refresh", { method: "POST", credentials: "same-origin" })
+    .then((r) => r.ok)
+    .catch(() => false)
+    .then((ok) => {
+      if (ok) renewedAt = Date.now()
+      return ok
+    })
+    .finally(() => (refreshing = null)))
+
+const renewIfStale = () => {
+  if (Date.now() - renewedAt >= RENEW_EVERY) void refresh()
+}
+setInterval(renewIfStale, 30e3)
+addEventListener("focus", renewIfStale)
+document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && renewIfStale())
+
+const tagOf = (error: unknown) => (error as { _tag?: string })?._tag ?? "Error"
+
 /** Runs a call; rejects with `Failed` carrying the error's tag (Unauthorized, KeyHeld, …). */
 export const call = async <A>(f: (c: Client) => any): Promise<A> => {
   try {
     return (await work.run(f)) as A
   } catch (error) {
-    const tag = (error as { _tag?: string })?._tag ?? "Error"
-    throw new Failed(tag, error)
+    if (tagOf(error) !== "Unauthorized") throw new Failed(tagOf(error), error)
+    // Renew and try once more; another tab may have renewed the cookie even if this refresh lost the race.
+    await refresh()
+    try {
+      return (await work.run(f)) as A
+    } catch (again) {
+      throw new Failed(tagOf(again), again)
+    }
   }
 }
 
