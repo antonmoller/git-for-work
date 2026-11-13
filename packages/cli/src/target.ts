@@ -21,8 +21,11 @@ export const remoteBase = (remote: string) =>
 /** A file or folder inside a Git checkout, as the URL of the same path on its remote and branch. */
 export function fromPath(path: string, cwd = process.cwd()) {
   const full = resolve(cwd, path)
-  if (!existsSync(full)) return null
-  const dir = statSync(full).isDirectory() ? full : dirname(full)
+  // A file that was deleted still has its URL, as long as its folder is in a checkout.
+  const exists = existsSync(full)
+  const isDir = exists && statSync(full).isDirectory()
+  const dir = isDir ? full : dirname(full)
+  if (!existsSync(dir)) return null
   const root = git(dir, "rev-parse", "--show-toplevel")
   if (!root) return null
   const remote = git(root, "remote", "get-url", "origin") ?? git(root, "remote", "get-url", git(root, "remote")?.split("\n")[0] ?? "origin")
@@ -30,7 +33,7 @@ export function fromPath(path: string, cwd = process.cwd()) {
   const base = remote ? remoteBase(remote) : `${basename(root).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || "repo"}.local`
   const branch = git(root, "rev-parse", "--abbrev-ref", "HEAD") ?? "main"
   const rel = relative(root, full).split("\\").join("/")
-  const kind = statSync(full).isDirectory() ? "tree" : "blob"
+  const kind = isDir ? "tree" : "blob"
   return `https://${base}/${kind}/${branch === "HEAD" ? (git(root, "rev-parse", "HEAD") ?? "main") : branch}${rel ? `/${rel}` : ""}`
 }
 
