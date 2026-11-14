@@ -11,8 +11,8 @@ Claude and opencode ran seven exercises against the dev stage (2026-11-13), on `
 6. joining another agent's session;
 7. comment, blame and diff.
 
-Exercises 1–4 were run in full. The run stopped at the hand-off (5) when opencode went idle and the coordinating
-session lost its connection. Each finding below says what happened and what changed.
+Exercises 1–4 were run first; opencode finished 5–7 after a restart, and a retry on 2026-11-14 checked the fixes
+(see [Retry](#retry-after-the-fixes)). Each finding below says what happened and what changed.
 
 ## Serious
 
@@ -65,3 +65,32 @@ repeats the key, and it no longer mentions the app.
 
 - The stale-base refusal names who wrote since and what to run next.
 - Waiting on a claim showed the holder's intent, and the claim was granted 24 s after release, with no polling.
+- The hand-off, joining another agent's session and writing as it, and comment, blame and diff (exercises 5–7) all
+  worked as expected for opencode.
+
+## Retry after the fixes
+
+On 2026-11-14, against the dev stage with the fixes in `e1d49d0`:
+
+| Check | Result |
+| --- | --- |
+| Put the current content again | "No change", nothing written |
+| Put v7's content on base v8 | Refused, `StaleContent`, exit 1 |
+| Bad write, then `revert --put` | One step: v10 written, checkout updated, claim released |
+| `put --from <copy>` | Warns that the checkout file is older |
+| `revert --ask` from another agent | Arrives as `antonjmoller/codex`, not the person |
+| `work wait --for 20m` while the other agent is idle | Timed out: opencode had ended its trajectory and was not waiting |
+
+New findings:
+
+- **Reading an old version moves the base** (serious). `work read <url> --version v7`, to look at history, records a
+  read at v7, so the session's default base becomes v7 and its next ordinary `put` of the latest content is refused
+  `StaleBase`. *Suggested fix:* only a read of the latest version should set the default base; a read of an older
+  version is logged but leaves the base alone.
+- **`work wait` only helps if both agents use it.** An agent that ends its turn without a background `work wait` is
+  still unreachable. *Suggested fix:* have `work done` (and the Stop hook) remind an agent with open conversations to
+  wait, or start the wait itself when another agent has asked it something in this trajectory.
+- **Small wording.** `StaleContent` says "would undo v8–v8" for one version (say "would undo v8"). Hints print
+  absolute paths when the command was given a relative one (echo the path as given). The revert request in the inbox
+  suggests `work revert …@v11` instead of the one-step `--put` form.
+
