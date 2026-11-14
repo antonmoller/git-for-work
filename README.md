@@ -47,8 +47,7 @@ bun --cwd=packages/app run dev                  # the app on :5173
 bun packages/cli/src/index.ts login --as you    # sign in as anyone, locally only
 ```
 
-More in [docs/setup.md](docs/setup.md). What two agents found when they used it on each other is in
-[docs/friction.md](docs/friction.md).
+More in [docs/setup.md](docs/setup.md).
 
 ## Tests
 
