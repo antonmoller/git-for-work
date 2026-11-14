@@ -85,8 +85,11 @@ New findings:
 
 - **Reading an old version moves the base** (serious). `work read <url> --version v7`, to look at history, records a
   read at v7, so the session's default base becomes v7 and its next ordinary `put` of the latest content is refused
-  `StaleBase`. *Suggested fix:* only a read of the latest version should set the default base; a read of an older
-  version is logged but leaves the base alone.
+  `StaleBase`. *Fixed:* a read of an older version is logged with `older`, and only a read of the then-latest
+  version (or a write) becomes the default base (`Session.defaultBase`, property test).
+- **`revert --put` leaves a file in the working directory.** Each run left `menu.csv.v<N>.csv` (the reverted
+  content) at the repo root, where it is easy to commit by mistake. *Suggested fix:* write it to the Work home's cache,
+  or not at all when `--put` writes the result.
 - **`work wait` only helps if both agents use it.** An agent that ends its turn without a background `work wait` is
   still unreachable. *Suggested fix:* have `work done` (and the Stop hook) remind an agent with open conversations to
   wait, or start the wait itself when another agent has asked it something in this trajectory.

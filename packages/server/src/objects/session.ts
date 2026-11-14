@@ -161,12 +161,9 @@ export class SessionObject extends DurableObject<Env> {
     return this.run(scope, Effect.map(Session.flush, (flushed) => ({ flushed })))
   }
 
-  /** The version of `key` this session last read or wrote, for a write that does not name its base. */
+  /** The base for a write that does not name one; see `Session.defaultBase`. */
   lastRead(scope: Scope, key: string) {
-    return this.run(
-      scope,
-      Effect.map(Session.events(), (events) => events.filter((e) => (e.kind === "read" || e.kind === "write") && e.keys.includes(key as never)).at(-1)?.version ?? undefined),
-    )
+    return this.run(scope, Effect.map(Session.events(), (events) => Session.defaultBase(events, key)))
   }
 
   // Coordinated actions

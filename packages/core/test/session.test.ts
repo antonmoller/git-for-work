@@ -168,3 +168,29 @@ describe("inbox and tasks through sessions", () => {
     expect(status).toEqual({ "Check freight": "done", "Call Anna": "done", "1": "open" })
   })
 })
+
+describe("the default base", () => {
+  test("is the last version written, or read while it was the latest; an older read never is", () =>
+    fc.assert(
+      fc.property(
+        fc.array(fc.record({ kind: fc.constantFrom("read", "older", "write", "other"), key: fc.constantFrom("a", "b"), version: fc.integer({ min: 1, max: 20 }) }), { maxLength: 30 }),
+        (steps) => {
+          const events = steps.map(
+            (s, i) =>
+              ({
+                kind: s.kind === "older" ? "read" : s.kind === "other" ? "note" : s.kind,
+                keys: [s.key],
+                version: s.version,
+                data: s.kind === "older" ? { older: true } : null,
+                aseq: i + 1,
+              }) as never,
+          )
+          for (const key of ["a", "b"]) {
+            const model = steps.filter((s) => s.key === key && (s.kind === "read" || s.kind === "write")).at(-1)?.version
+            expect(Session.defaultBase(events, key)).toBe(model)
+          }
+        },
+      ),
+      { numRuns: 200 },
+    ))
+})

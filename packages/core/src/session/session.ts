@@ -205,6 +205,15 @@ export const coordinate = <A, E, R>(who: Who, kind: Entry.Kind, keys: ReadonlyAr
   })
 
 /** The session's own log, oldest first, from `after`. */
+/**
+ * The base for a write that names none: the last version of `key` this session wrote, or read while it was the
+ * latest. A read of an older version (marked `older` when it was recorded) is history, not a base.
+ */
+export const defaultBase = (events: ReadonlyArray<Entry.Event>, key: string): number | undefined =>
+  events
+    .filter((e) => (e.kind === "write" || (e.kind === "read" && !(e.data as { older?: boolean } | null)?.older)) && e.keys.includes(key as never))
+    .at(-1)?.version ?? undefined
+
 export const events = (after = 0, trajectory?: string) =>
   Effect.gen(function* () {
     const database = yield* Database.Service

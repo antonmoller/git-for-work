@@ -140,7 +140,11 @@ const SessionHandlers = HttpApiBuilder.group(Api, "session", (handlers) =>
       Effect.gen(function* () {
         const s = yield* sessionFor(ctx.params.workspace)
         const key = ctx.payload.url ? yield* normalize(ctx.payload.url, s.info.rules) : null
-        const version = ctx.payload.version ?? (key && ctx.payload.kind === "read" ? (yield* call(() => s.object.who(key))).version : null)
+        const latest = key && ctx.payload.kind === "read" ? (yield* call(() => s.object.who(key))).version : null
+        const version = ctx.payload.version ?? latest
+        // A read of an older version is history: it is logged, but never becomes the base of a later write.
+        const older = ctx.payload.kind === "read" && version !== null && latest !== null && version < latest
+        const data = older ? { ...((ctx.payload.data as Record<string, unknown> | null | undefined) ?? {}), older: true } : (ctx.payload.data ?? null)
         return yield* call(() =>
           s.session.record(s.scope, s.who, {
             kind: ctx.payload.kind,
@@ -148,7 +152,7 @@ const SessionHandlers = HttpApiBuilder.group(Api, "session", (handlers) =>
             keys: key ? [key] : [],
             title: ctx.payload.title ?? null,
             version: version ?? null,
-            data: ctx.payload.data ?? null,
+            data,
           }),
         )
       }),

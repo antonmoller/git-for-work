@@ -58,6 +58,8 @@ Expiries, grants to waiters and comments from the browser are the workspace's ow
   one of the same fields (property tests).
 - A write never silently undoes another: the current content writes nothing, and an earlier version's content is
   refused unless it is a revert (property test).
+- A write that names no base is on the last version the session wrote or read while it was the latest. Reading an
+  older version, to look at history, never becomes the base (property test).
 
 ## Later
 
