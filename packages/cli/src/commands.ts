@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
-import { basename } from "node:path"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { basename, join } from "node:path"
 import { WorkSocket } from "@work/client"
 import type { Claim } from "@work/schema/claim"
 import type { Entry } from "@work/schema/entry"
@@ -267,8 +267,14 @@ export const commands: Record<string, Command> = {
       const fields = str(opts.fields)?.split(",").map((f) => f.trim()).filter(Boolean)
       const plan = await ctx.call<Write.RevertPlan>((c) => c.write.revert({ params: { workspace }, payload: { url: target.url, version: target.version!, fields } }))
       const shape = plan.content?.trim().startsWith("{") ? "json" : plan.content?.includes(",") ? "csv" : "txt"
-      const out = str(opts.out) ?? `${basename(plan.key.split(/[?#]/)[0]!) || "content"}.v${plan.current + 1}.${shape}`
-      if (plan.content !== null) writeFileSync(out, plan.content)
+      // The result goes where --out says. Without it, --put needs no file, and the two-step form keeps its file in the
+      // Work home rather than the working directory, where it would be easy to commit by mistake.
+      const name = `${basename(plan.key.split(/[?#]/)[0]!) || "content"}.v${plan.current + 1}.${shape}`
+      const out = str(opts.out) ?? (opts.put ? null : join(Config.home(), "reverts", name))
+      if (out && plan.content !== null) {
+        if (!str(opts.out)) mkdirSync(join(Config.home(), "reverts"), { recursive: true })
+        writeFileSync(out, plan.content)
+      }
       // A CSV row's value already starts with its key; don't say it twice.
       const values = Object.entries(plan.values).map(([f, v]) => {
         const value = unquote(v)
